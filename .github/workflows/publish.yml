@@ -1,0 +1,49 @@
+name: Publicar proximo item aprovado
+
+on:
+  schedule:
+    # espacado ao longo do dia (UTC) - evita publicar tudo em rajada
+    - cron: "0 12 * * *"  # 09:00 America/Sao_Paulo
+    - cron: "0 14 * * *"  # 11:00
+    - cron: "0 16 * * *"  # 13:00
+    - cron: "0 18 * * *"  # 15:00
+    - cron: "0 20 * * *"  # 17:00
+    - cron: "0 22 * * *"  # 19:00
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - run: pip install -r requirements.txt
+
+      - name: Confirmar ffmpeg disponivel
+        run: ffmpeg -version
+
+      - name: Restaurar credenciais do YouTube
+        run: |
+          echo '${{ secrets.YOUTUBE_CLIENT_SECRET_JSON }}' > client_secret.json
+          echo '${{ secrets.YOUTUBE_TOKEN_JSON }}' > token.json
+
+      - name: Publicar proximo item da fila
+        env:
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          EDGE_TTS_VOICE: ${{ vars.EDGE_TTS_VOICE }}
+        run: python publish.py
+
+      - name: Salvar status de publicado no repositorio
+        run: |
+          git config user.name "gta6-pipeline-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add review/
+          git diff --cached --quiet || git commit -m "chore: item publicado $(date +%F_%H:%M)"
+          git push
