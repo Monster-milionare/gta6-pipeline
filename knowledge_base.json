@@ -1,0 +1,74 @@
+{
+  "_leia_isto": "Mantenha aqui so fatos CONFIRMADOS oficialmente (rockstargames.com/VI, newswire da Rockstar/Take-Two, apresentacao na Netflix). NUNCA cole rumor, leak ou teoria nao confirmada aqui - este arquivo e a unica fonte de 'fatos do jogo' que o gerador de roteiro pode usar, exatamente para evitar que a IA invente algo que pareca um vazamento real.",
+
+  "fonte_oficial": "https://www.rockstargames.com/VI",
+  "atualizado_em": "2026-11-06",
+
+  "data_lancamento": "19 de novembro de 2026 (faltam ~13 dias a partir de hoje)",
+  "pre_load": "Pre-carga do jogo liberada a partir de 10 de novembro de 2026 (segundo rockstargames.com/VI)",
+
+  "plataformas": ["PlayStation 5", "Xbox Series X|S"],
+  "observacao_plataformas": "Sem PC nem Switch 2 anunciados ate agora. Qualquer afirmacao sobre versao de PC e especulacao, nao fato.",
+
+  "protagonistas": [
+    "Jason Duval",
+    "Lucia Caminos"
+  ],
+
+  "sinopse_oficial": "Um roubo que parecia facil (\"easy score\") da errado e deixa Jason e Lucia presos numa conspiracao criminosa que se espalha por todo o estado de Leonida.",
+
+  "cenario": "Leonida, estado ficticio inspirado na Florida, com Vice City modernizada e mais densa como cidade central",
+
+  "localidades_confirmadas_em_material_oficial": [
+    "Vice City",
+    "Keys of Leonida",
+    "Grassrivers",
+    "Port Gellhorn",
+    "Ambrosia",
+    "Mount Kalaga"
+  ],
+
+  "trailers_oficiais": [
+    {
+      "nome": "Trailer 1",
+      "data": "dezembro de 2023",
+      "pontos_confirmados": [
+        "Apresenta Lucia como uma das protagonistas",
+        "Mostra Vice City com estetica atualizada",
+        "Confirma dupla de protagonistas (casal ao estilo Bonnie & Clyde)"
+      ]
+    },
+    {
+      "nome": "Trailer 2",
+      "data": "maio de 2025",
+      "pontos_confirmados": [
+        "Detalha mais o mapa de Leonida",
+        "Mostra Jason Duval",
+        "Reforca o tom de dupla em fuga"
+      ]
+    },
+    {
+      "nome": "Extended Look",
+      "data": "27 de agosto de 2026",
+      "pontos_confirmados": [
+        "Gameplay mais extenso liberado oficialmente",
+        "Detalhes de mecanicas mostrados pela primeira vez"
+      ]
+    },
+    {
+      "nome": "Launch Trailer",
+      "data": "disponivel em rockstargames.com/VI (data exata de publicacao nao confirmada por fonte primaria - trate como 'outubro/novembro de 2026', nao cite dia exato sem checar)",
+      "pontos_confirmados": [
+        "Reforca a sinopse oficial (roubo que da errado -> conspiracao em Leonida)",
+        "Gravado com material capturado em PS5 padrao (nao PS5 Pro), segundo cobertura da imprensa - confirme no proprio video antes de afirmar isso com certeza"
+      ],
+      "pontos_nao_confirmados_por_fonte_primaria": [
+        "Trilha sonora especifica, nomes de faixas/artistas, lancamento de album - so use se voce mesmo conferir no material oficial"
+      ]
+    }
+  ],
+
+  "observacao_leak_agosto_2026": "Houve um vazamento de gameplay nao-oficial pouco antes do Extended Look; a Rockstar chamou o episodio de 'heartbreaking'. NAO use conteudo desse leak como fonte - trate apenas o material oficial acima como confirmado.",
+
+  "observacao_geral": "Sempre confira rockstargames.com/VI antes de cada lote: a Rockstar esta publicando novidades quase diarias nessa reta final (ex.: itens datados de 29/10, 03/11 e 05/11/2026 na propria pagina). Atualize este arquivo com qualquer fato novo confirmado ali antes de pedir pro gerador criar roteiro."
+}
