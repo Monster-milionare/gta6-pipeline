@@ -37,6 +37,9 @@ jobs:
           python assets/mascote/gerar_mascote.py
           python assets/musica/gerar_musica.py
 
+      - name: Baixar screenshots oficiais de GTA VI (broll real)
+        run: python assets/broll_oficial/baixar_broll.py
+
       - name: Aguardar jitter aleatorio (so em execucoes agendadas)
         if: github.event_name == 'schedule'
         run: sleep $((RANDOM % 1200))
