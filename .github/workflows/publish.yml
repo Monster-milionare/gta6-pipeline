@@ -32,6 +32,11 @@ jobs:
       - name: Confirmar ffmpeg disponivel
         run: ffmpeg -version
 
+      - name: Gerar mascote e trilha sonora (assets sintetizados em runtime)
+        run: |
+          python assets/mascote/gerar_mascote.py
+          python assets/musica/gerar_musica.py
+
       - name: Restaurar credenciais do YouTube
         run: |
           echo '${{ secrets.YOUTUBE_CLIENT_SECRET_JSON }}' > client_secret.json
