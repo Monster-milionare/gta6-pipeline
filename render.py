@@ -34,14 +34,17 @@ FONT_CANDIDATES = [
     "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
 ]
 
-# Mascote original do canal ("Max, o Papagaio Neon") - ver assets/mascote/.
-# Alterna as duas poses de "falando" a cada frase pra dar uma animação
-# simples de boca mexendo (estilo stop-motion) sem precisar de video real.
+# Mascote original do canal (protagonista estilo Vice City/Miami) - ver
+# assets/mascote/gerar_mascote.py (gerado em runtime pelo workflow, sem
+# assets binarios versionados no repo). Alterna as duas poses de "falando"
+# a cada frase pra dar uma animação simples de boca mexendo (estilo
+# stop-motion) sem precisar de video real.
 MASCOTE_POSES = ["falando_a.png", "falando_b.png"]
 _mascote_cache: dict[str, Image.Image] = {}
 
-# Trilha de fundo royalty-free - ver assets/musica/. Se a pasta estiver
-# vazia, o vídeo sai só com a narração (sem travar).
+# Trilha de fundo 100% original, sintetizada em runtime - ver
+# assets/musica/gerar_musica.py. Se a pasta estiver vazia (gerador ainda
+# não rodou), o vídeo sai só com a narração (sem travar).
 MUSICA_VOLUME = 0.10  # bem baixo, pra não competir com a narração
 
 
@@ -162,7 +165,7 @@ def _run(cmd: list[str]) -> None:
 
 def _escolher_musica() -> Path | None:
     musica_dir = config.ASSETS_DIR / "musica"
-    faixas = sorted(musica_dir.glob("*.mp3"))
+    faixas = sorted(musica_dir.glob("*.wav")) + sorted(musica_dir.glob("*.mp3"))
     if not faixas:
         return None
     return random.choice(faixas)
