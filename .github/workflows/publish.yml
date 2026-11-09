@@ -60,4 +60,21 @@ jobs:
           git config user.email "actions@users.noreply.github.com"
           git add review/
           git diff --cached --quiet || git commit -m "chore: item publicado $(date +%F_%H:%M)"
-          git push
+          # O video ja foi publicado no YouTube nesse ponto - o que falta
+          # e so salvar "Publicado: sim" no repo. Se outro push (manual ou
+          # de outra execucao concorrente) mudou o main nesse meio tempo,
+          # um "git push" direto falha com rejected/non-fast-forward e
+          # essa marcacao se perde, arriscando publicar o MESMO item de
+          # novo no proximo ciclo. Por isso, se falhar, rebase em cima do
+          # que tem de novo no remoto e tenta de novo (poucas vezes,
+          # sempre com um commit so nosso, entao o rebase e seguro).
+          for i in 1 2 3 4 5; do
+            if git push; then
+              echo "[publish] status salvo no repositorio."
+              break
+            fi
+            echo "[publish] push rejeitado (tentativa $i/5) - rebase e tenta de novo"
+            git fetch origin main
+            git rebase origin/main
+            sleep 5
+          done
