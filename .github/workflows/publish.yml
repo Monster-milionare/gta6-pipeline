@@ -2,7 +2,11 @@ name: Publicar proximo item aprovado
 
 on:
   schedule:
-    # espacado ao longo do dia (UTC) - evita publicar tudo em rajada
+    # espacado ao longo do dia (UTC) - cada disparo roda publish.py --all,
+    # que processa TUDO que ainda falta publicar no dia (nao so 1 item) -
+    # isso existe pra sobreviver ao cron do GitHub Actions nao ser
+    # confiavel (execucoes atrasadas ou nem disparando nesse dia). Varios
+    # horarios aqui so dao mais chances de pelo menos 1 disparar no dia.
     - cron: "0 12 * * *"  # 09:00 America/Sao_Paulo
     - cron: "0 14 * * *"  # 11:00
     - cron: "0 16 * * *"  # 13:00
@@ -17,6 +21,7 @@ permissions:
 jobs:
   publish:
     runs-on: ubuntu-latest
+    timeout-minutes: 300
     steps:
       - uses: actions/checkout@v4
 
@@ -49,10 +54,10 @@ jobs:
           echo '${{ secrets.YOUTUBE_CLIENT_SECRET_JSON }}' > client_secret.json
           echo '${{ secrets.YOUTUBE_TOKEN_JSON }}' > token.json
 
-      - name: Publicar proximo item da fila
+      - name: Publicar tudo que falta hoje (catch-up, ver publish.py)
         env:
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
-        run: python publish.py
+        run: python publish.py --all
 
       - name: Salvar status de publicado no repositorio
         run: |
