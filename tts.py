@@ -10,7 +10,7 @@ por IA) pra descobrir os tempos — cada frase já tem duração conhecida.
 import random
 import re
 import subprocess
-from dataclasses import dataclass
+_RATE_VARIACAO = ("+2%", "+6%", "-2%", "+4%", "+0%")
 from pathlib import Path
 
 import edge_tts
