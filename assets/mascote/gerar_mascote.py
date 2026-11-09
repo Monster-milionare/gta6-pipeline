@@ -7,12 +7,15 @@ fonte ou elemento da Rockstar/Take-Two - e so uma ilustracao original no
 estilo "flat design" com paleta neon (rosa/ciano/roxo), que e so uma
 paleta de cores, livre de uso.
 
-Gera 3 poses (fundo transparente, 800x800):
+Gera 4 poses (fundo transparente, 800x800):
   - idle.png       : boca fechada, parado (cena padrao)
   - falando_a.png  : boca entreaberta (quadro de fala 1)
   - falando_b.png  : boca aberta (quadro de fala 2)
-As poses falando_a/falando_b alternam quadro a quadro durante a narracao
-pra dar ilusao de "boca mexendo" (lip-sync simples).
+  - apontando.png  : boca aberta + braco esquerdo levantado apontando pro
+                      canto superior direito (usado no pedido de
+                      like/inscricao — ver render.py)
+idle/falando_a/falando_b sao combinadas em loop (render.py) pra dar
+ilusao de "boca mexendo" (lip-sync simples, estilo stop-motion).
 """
 from PIL import Image, ImageDraw, ImageFilter
 import math
@@ -135,7 +138,29 @@ def _draw_boca(draw, abertura):
         draw.rounded_rectangle([376, cy + 4, 424, cy + 16], radius=8, fill=(150, 60, 65, 255))
 
 
-def gerar_pose(nome, abertura_boca):
+def _draw_braco_apontando(draw):
+    """Braco saindo do ombro direito da ilustracao (lado esquerdo de quem
+    olha a tela) subindo em diagonal ate o canto superior, terminando
+    numa mao com o indicador esticado — gesto de "apontar pra algo"
+    (usado no pedido de like/inscricao, apontando pro grafico que
+    render.py desenha no canto superior da tela)."""
+    # manga da jaqueta (mesma cor da jaqueta), do ombro ate o punho
+    draw.polygon([
+        (540, 555), (585, 480), (635, 395), (660, 330),
+        (615, 310), (575, 380), (530, 460), (500, 535),
+    ], fill=ROXO_ESCURO)
+    draw.line([(540, 555), (635, 395)], fill=(90, 50, 130, 255), width=8)
+    # punho (pele) saindo da manga
+    draw.polygon([(635, 395), (660, 330), (685, 300), (655, 285), (615, 350)], fill=PELE)
+    # mao fechada
+    draw.ellipse([648, 255, 702, 305], fill=PELE)
+    draw.ellipse([648, 255, 702, 305], outline=PELE_SOMBRA, width=3)
+    # dedo indicador esticado apontando pra cima/direita
+    draw.line([(685, 270), (725, 195)], fill=PELE, width=24, joint="curve")
+    draw.ellipse([710, 180, 738, 208], fill=PELE)
+
+
+def gerar_pose(nome, abertura_boca, apontando=False):
     img = _base_canvas()
     draw = ImageDraw.Draw(img, "RGBA")
     _draw_shoulders_jacket(draw)
@@ -144,6 +169,8 @@ def gerar_pose(nome, abertura_boca):
     draw = _draw_oculos(draw, img)
     _draw_nariz_e_sombra(draw)
     _draw_boca(draw, abertura_boca)
+    if apontando:
+        _draw_braco_apontando(draw)
     path = os.path.join(OUT_DIR, nome)
     img.save(path)
     print(f"gerado: {path}")
@@ -153,3 +180,4 @@ if __name__ == "__main__":
     gerar_pose("idle.png", 0)
     gerar_pose("falando_a.png", 1)
     gerar_pose("falando_b.png", 2)
+    gerar_pose("apontando.png", 2, apontando=True)
