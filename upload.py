@@ -1,13 +1,13 @@
 """
 Upload agendado pro YouTube via YouTube Data API v3.
 
-Setup (uma vez so, manual):
+Setup (uma vez só, manual):
 1. Crie um projeto no Google Cloud Console e ative a "YouTube Data API v3".
 2. Crie credenciais OAuth (tipo "Desktop app") e baixe o client_secret.json
    pra pasta do projeto.
-3. Na primeira execucao, um link de autorizacao vai abrir/ser impresso;
-   autorize com a conta dona do canal. Isso salva token.json e nao pede
-   de novo (o token e renovado sozinho).
+3. Na primeira execução, um link de autorização vai abrir/ser impresso;
+   autorize com a conta dona do canal. Isso salva token.json e não pede
+   de novo (o token é renovado sozinho).
 """
 import os
 from pathlib import Path
@@ -33,14 +33,14 @@ def _get_credentials() -> Credentials:
         if creds and creds.expired and creds.refresh_token:
             creds.refresh(google.auth.transport.requests.Request())
         elif os.environ.get("CI") or os.environ.get("GITHUB_ACTIONS"):
-            # Rodando no GitHub Actions: nao tem navegador pra autorizar do
-            # zero aqui. token.json (com refresh_token valido) precisa ter
+            # Rodando no GitHub Actions: não tem navegador pra autorizar do
+            # zero aqui. token.json (com refresh_token válido) precisa ter
             # sido gerado 1x localmente e restaurado a partir do secret
-            # YOUTUBE_TOKEN_JSON antes de chamar isto - ver README.
+            # YOUTUBE_TOKEN_JSON antes de chamar isto — ver README.
             raise RuntimeError(
-                "token.json ausente/invalido em ambiente sem navegador. Gere-o "
-                "1x na sua maquina (rode publish.py localmente uma vez) e "
-                "salve o conteudo no secret YOUTUBE_TOKEN_JSON do repositorio."
+                "token.json ausente/inválido em ambiente sem navegador. Gere-o "
+                "1x na sua máquina (rode publish.py localmente uma vez) e "
+                "salve o conteúdo no secret YOUTUBE_TOKEN_JSON do repositório."
             )
         else:
             flow = InstalledAppFlow.from_client_secrets_file(
@@ -85,3 +85,18 @@ def upload_video(
     request = youtube.videos().insert(part="snippet,status", body=body, media_body=media)
     response = request.execute()
     return response["id"]
+
+
+def set_thumbnail(video_id: str, thumbnail_path: Path) -> None:
+    """Define a thumbnail customizada de um vídeo já enviado (gerar_thumbnail.py
+    gera o arquivo). O escopo `youtube.upload` já usado acima é suficiente
+    pra isso (confirmado na documentação oficial da API - não precisa pedir
+    nenhuma permissão OAuth nova). Chame isto dentro de um try/except no
+    chamador: canais que ainda não verificaram o telefone no YouTube levam
+    403 ("doesn't have permissions to upload and set custom video
+    thumbnails") até fazer a verificação - isso nunca deve travar o
+    publish.py, só pular a thumbnail customizada naquele vídeo."""
+    creds = _get_credentials()
+    youtube = build("youtube", "v3", credentials=creds)
+    media = MediaFileUpload(str(thumbnail_path))
+    youtube.thumbnails().set(videoId=video_id, media_body=media).execute()
