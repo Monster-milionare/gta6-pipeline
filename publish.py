@@ -5,10 +5,24 @@ execução, pega o PRÓXIMO item já aprovado e ainda não publicado, gera a
 narração frase a frase, monta o vídeo com ffmpeg e agenda o upload no
 YouTube.
 
-Uso normal (via schedule): python publish.py
-Processar tudo que restar hoje de uma vez: python publish.py --all
+IMPORTANTE (auto-recuperação): o workflow sempre chama "python publish.py
+--all" agora, não só "python publish.py". Isso existe porque o cron do
+GitHub Actions não é confiável de verdade — na prática, execuções agendadas
+saem atrasadas (observamos horários previstos pra 09h/06h BRT rodando só
+às 12h) ou simplesmente não disparam nesse dia. Se cada execução só
+processasse 1 item, um agendamento perdido virava um short que nunca sai
+do forno. Com --all, QUALQUER execução (mesmo atrasada, mesmo substituindo
+2-3 horários perdidos) processa tudo que ainda falta publicar no dia, uma
+de cada vez, com uma pausa aleatória real entre cada item (ver
+_ESPERA_ENTRE_ITENS_MIN) pra continuar parecendo um canal publicando no
+ritmo humano, não uma rajada de uploads simultâneos (o tipo de padrão que
+o sistema anti-spam do YouTube usa pra agrupar/banir canais - ver README).
+
+Uso: python publish.py [--all]
 """
+import random
 import sys
+import time
 from datetime import date as date_cls
 from pathlib import Path
 
@@ -32,13 +46,17 @@ CTA_FRASES = [
     "Deixa o like, comenta o que você achou e se inscreve pra ficar por dentro de GTA VI.",
 ]
 
+# Pausa real entre itens quando há mais de 1 pra publicar na mesma
+# execução (catch-up) - minutos. Faixa larga o bastante pra não parecer
+# robótico, curta o bastante pra ainda caber tudo dentro do limite de 6h
+# de job do GitHub Actions mesmo processando o lote inteiro do zero.
+_ESPERA_ENTRE_ITENS_MIN = (12, 25)
 
 def _cta_frase(item) -> str:
     # escolha determinística por item (a mesma frase se o vídeo for
     # reprocessado), variando entre os itens do lote.
     idx = hash(item.item_id) % len(CTA_FRASES)
     return CTA_FRASES[idx]
-
 
 def _gerar_thumbnail_seguro(item) -> Path | None:
     """Nunca deixa um erro na geração da thumbnail derrubar o publish.py -
@@ -51,7 +69,6 @@ def _gerar_thumbnail_seguro(item) -> Path | None:
         print(f"[publish] aviso: falhou ao gerar thumbnail de {item.item_id}: {exc}")
         return None
 
-
 def _set_thumbnail_seguro(video_id: str, thumb_path: Path) -> None:
     """set_thumbnail pode dar 403 em canais que ainda não verificaram o
     telefone no YouTube ("doesn't have permissions to upload and set
@@ -62,7 +79,6 @@ def _set_thumbnail_seguro(video_id: str, thumb_path: Path) -> None:
     except Exception as exc:
         print(f"[publish] aviso: falhou ao definir thumbnail de {video_id}: {exc}")
 
-
 def _description(item, date_str: str) -> str:
     return (
         f"{item.titulo}\n\n"
@@ -70,7 +86,6 @@ def _description(item, date_str: str) -> str:
         f"Interactive sobre GTA VI. Lançamento: 19/11/2026.\n"
         f"#GTA6 #GTAVI #RockstarGames"
     )
-
 
 def _process_item(item, date_str: str, review_path: Path) -> None:
     print(f"[publish] processando {item.item_id} ({item.kind}): {item.titulo}")
@@ -99,7 +114,6 @@ def _process_item(item, date_str: str, review_path: Path) -> None:
     mark_item_published(review_path, date_str, item.item_id)
     print(f"[publish] {item.item_id} publicado/agendado como https://youtu.be/{video_id}")
 
-
 def main():
     date_str = date_cls.today().isoformat()
     review_path = config.REVIEW_DIR / f"{date_str}.md"
@@ -115,18 +129,23 @@ def main():
 
     process_all = "--all" in sys.argv
     processed_any = False
+    primeiro = True
     while True:
         item = next_unpublished(load_batch(review_path, date_str))
         if not item:
             break
+        if not primeiro:
+            espera_min = random.randint(*_ESPERA_ENTRE_ITENS_MIN)
+            print(f"[publish] aguardando ~{espera_min}min antes do próximo item (evita rajada de uploads).")
+            time.sleep(espera_min * 60)
         _process_item(item, date_str, review_path)
         processed_any = True
+        primeiro = False
         if not process_all:
             break
 
     if not processed_any:
         print(f"[publish] nada pendente em {date_str} — todo o lote já foi publicado.")
-
 
 if __name__ == "__main__":
     main()
