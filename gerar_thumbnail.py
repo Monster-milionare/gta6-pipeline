@@ -15,12 +15,23 @@ Critérios aqui seguem o estudo de thumbnails da vidIQ (2026, ~500 vídeos
   - nada de elemento importante no canto inferior direito, onde o YouTube
     sobrepõe a duração do vídeo.
 
-Usa só o mascote original do canal (ver assets/mascote/gerar_mascote.py) e
-os mesmos screenshots oficiais de assets/broll_oficial/ já usados no vídeo
-- nenhum asset novo, nenhuma imagem de IA fingindo ser cena do jogo.
+Usa sempre o mascote original do canal (ver assets/mascote/gerar_mascote.py).
+O FUNDO agora tenta vir de uma imagem gerada por IA via Pollinations.ai
+(gratuito, sem conta, sem chave de API, sem cartão - ver
+https://github.com/pollinations/pollinations/blob/master/APIDOCS.md) com
+um prompt propositalmente GENÉRICO de estética (néon/Miami/vice-city) -
+nunca citamos "GTA VI", nem os nomes dos personagens, nem pedimos pra IA
+desenhar uma cena específica do jogo. É arte original com clima parecido,
+não uma falsificação de screenshot oficial. Pollinations é "best effort"
+(sem SLA, pode falhar ou dar rate-limit) - se der qualquer problema, cai
+automaticamente pro fundo com os screenshots oficiais de
+assets/broll_oficial/ (mesmos usados no vídeo) ou cor sólida, sem nunca
+travar a publicação por causa disso.
 """
 import random
+from io import BytesIO
 from pathlib import Path
+from urllib.parse import quote
 
 from PIL import Image, ImageDraw, ImageFont
 
@@ -33,6 +44,15 @@ FONT_CANDIDATES = [
     "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
 ]
 
+# Prompt fixo e genérico (nunca menciona GTA VI nem personagens) - só
+# estética "néon synthwave Miami à noite" pra dar um fundo mais dinâmico
+# que uma screenshot estática. Ver aviso de uso no docstring do módulo.
+_PROMPT_FUNDO_IA = (
+    "neon synthwave miami skyline at night, palm trees, pink and cyan "
+    "neon lights, retro 80s crime city aesthetic, rain-soaked street "
+    "reflections, cinematic dramatic lighting, high contrast, no text, "
+    "no logos, no people, no letters, no watermark"
+)
 
 def _load_font(size: int) -> ImageFont.FreeTypeFont:
     for path in FONT_CANDIDATES:
@@ -40,8 +60,29 @@ def _load_font(size: int) -> ImageFont.FreeTypeFont:
             return ImageFont.truetype(path, size)
     return ImageFont.load_default()
 
+def _fundo_ia(w: int, h: int) -> Image.Image | None:
+    """Tenta gerar o fundo via Pollinations.ai. Retorna None (nunca
+    levanta exceção) em qualquer falha - timeout, rate limit (serviço
+    permite ~1 imagem a cada 45s por IP, tranquilo pro nosso volume de 1
+    thumbnail por publicação), fora do ar, resposta invalida, etc."""
+    try:
+        import requests
 
-def _fundo_cover(w: int, h: int) -> Image.Image:
+        seed = random.randint(0, 999_999)
+        url = (
+            f"https://image.pollinations.ai/prompt/{quote(_PROMPT_FUNDO_IA)}"
+            f"?width={w}&height={h}&seed={seed}&nologo=true&safe=true"
+        )
+        resp = requests.get(url, timeout=25)
+        resp.raise_for_status()
+        img = Image.open(BytesIO(resp.content)).convert("RGB")
+        if img.width < 100 or img.height < 100:
+            return None
+        return img.resize((w, h))
+    except Exception:
+        return None
+
+def _fundo_broll(w: int, h: int) -> Image.Image:
     broll_dir = config.ASSETS_DIR / "broll_oficial"
     images = sorted(broll_dir.glob("*.jpg")) + sorted(broll_dir.glob("*.png"))
     if not images:
@@ -56,21 +97,23 @@ def _fundo_cover(w: int, h: int) -> Image.Image:
         src = src.crop((0, (src.height - new_h) // 2, src.width, (src.height + new_h) // 2))
     return src.resize((w, h))
 
+def _fundo_cover(w: int, h: int) -> Image.Image:
+    """Fundo da thumbnail: tenta IA (Pollinations) primeiro, cai pro
+    broll oficial / cor sólida se a IA falhar por qualquer motivo."""
+    return _fundo_ia(w, h) or _fundo_broll(w, h)
 
 def _escurecer(img: Image.Image, fator: float = 0.62) -> Image.Image:
     """Escurece o fundo (mistura com preto) pra texto/mascote ficarem
-    legíveis em cima de qualquer screenshot - contraste é o achado mais
-    consistente do estudo da vidIQ."""
+    legíveis em cima de qualquer imagem de fundo - contraste é o achado
+    mais consistente do estudo da vidIQ."""
     preto = Image.new("RGB", img.size, (0, 0, 0))
     return Image.blend(img, preto, 1 - fator)
-
 
 def _titulo_impacto(titulo: str, max_palavras: int = 5) -> str:
     """3-5 palavras de gancho visual, não o título inteiro (esse já
     aparece embaixo da thumbnail no YouTube de qualquer forma)."""
     palavras = [p for p in titulo.upper().replace(":", "").replace("—", "-").split() if p]
     return " ".join(palavras[:max_palavras])
-
 
 def gerar_thumbnail(titulo: str, out_path: Path) -> Path:
     img = _fundo_cover(W, H)
