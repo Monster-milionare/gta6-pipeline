@@ -10,7 +10,7 @@ por IA) pra descobrir os tempos — cada frase já tem duração conhecida.
 import random
 import re
 import subprocess
-_RATE_VARIACAO = ("+2%", "+6%", "-2%", "+4%", "+0%")
+from dataclasses import dataclass
 from pathlib import Path
 
 import edge_tts
@@ -28,7 +28,6 @@ VOICE_PREFERENCIAS = [
     "pt-BR-AntonioNeural",
 ]
 
-
 def _dedup_preservando_ordem(itens: list[str]) -> list[str]:
     vistos: set[str] = set()
     out = []
@@ -38,21 +37,22 @@ def _dedup_preservando_ordem(itens: list[str]) -> list[str]:
             out.append(item)
     return out
 
-
 VOICE_PREFERENCIAS = _dedup_preservando_ordem(VOICE_PREFERENCIAS)
 VOICE = VOICE_PREFERENCIAS[0]
 
 # Pequena variação de ritmo/tom por frase pra soar menos "robótico" (uma
 # pessoa de verdade nunca fala toda frase exatamente no mesmo tom/ritmo).
 # edge-tts aceita rate/pitch direto, sem precisar escrever SSML na mão.
-_RATE_VARIACAO = ("+2%", "+6%", "-2%", "+4%", "0%")
+# IMPORTANTE: edge-tts exige sinal explicito (+/-) mesmo pra zero -
+# "0%" sozinho derruba com ValueError ("Invalid rate '0%'."), por isso
+# "+0%" aqui (bug real que quebrou a publicação em produção - corrigido).
+_RATE_VARIACAO = ("+2%", "+6%", "-2%", "+4%", "+0%")
 _PITCH_VARIACAO = ("+0Hz", "+2Hz", "-2Hz", "+1Hz")
 
 # Pausa curta entre frases (silêncio no fim do áudio) — sem isso a
 # narração gruda uma frase na outra sem respirar, o que é um dos
 # principais motivos de voz sintética soar robótica.
 PAUSA_ENTRE_FRASES_SEC = 0.22
-
 
 @dataclass
 class Segment:
@@ -61,12 +61,10 @@ class Segment:
     duration_sec: float
     is_cta: bool = False
 
-
 def _split_sentences(text: str) -> list[str]:
     text = re.sub(r"\s+", " ", text).strip()
     parts = re.split(r"(?<=[.!?])\s+", text)
     return [p.strip() for p in parts if p.strip()]
-
 
 def _probe_duration(path: Path) -> float:
     result = subprocess.run(
@@ -78,11 +76,9 @@ def _probe_duration(path: Path) -> float:
     )
     return float(result.stdout.strip())
 
-
 async def _synth_one(text: str, out_path: Path, voice: str, rate: str, pitch: str) -> None:
     communicate = edge_tts.Communicate(text, voice, rate=rate, pitch=pitch)
     await communicate.save(str(out_path))
-
 
 def _synth_com_fallback(text: str, out_path: Path, rate: str, pitch: str) -> None:
     import asyncio
@@ -98,7 +94,6 @@ def _synth_com_fallback(text: str, out_path: Path, rate: str, pitch: str) -> Non
     raise RuntimeError(
         f"Nenhuma voz da lista {VOICE_PREFERENCIAS} funcionou."
     ) from ultimo_erro
-
 
 def synthesize_sentences(text: str, out_dir: Path, cta: bool = False) -> list[Segment]:
     """Gera um mp3 por frase do roteiro e retorna cada um com sua duração.
