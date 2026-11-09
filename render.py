@@ -7,6 +7,30 @@ narração daquela frase (ver tts.py). Isso é propositalmente o oposto do
 padrão que o YouTube pune ("AI slideshow SEM comentário/narração", ver
 README): aqui toda cena tem narração real de um roteiro checado por você.
 
+DINAMISMO DE EDIÇÃO (pedido explícito: "estilo Mr. Beast", sempre ter algo
+acontecendo na tela, personagem não pode ficar grudado parado no mesmo
+canto o vídeo inteiro):
+- O mascote alterna de lado (esquerda/direita) cena a cena (_lado_da_cena)
+  em vez de ficar sempre no mesmo canto — já tira boa parte da sensação de
+  "imagem estática com boca mexendo".
+- A cada DESTAQUE_A_CADA frases (que não sejam CTA), a cena vira um
+  "destaque" full-bleed: a imagem de broll ocupa a tela quase toda (tarja
+  de legenda bem menor) e o mascote encolhe pra um canto na pose
+  "apontando", como se estivesse mostrando/revelando aquele print pro
+  espectador — é a versão possível, com os assets que realmente existem
+  no repo, do pedido de "ele aponta pra trás e aparece um trecho do
+  trailer": aqui é sempre um print OFICIAL já salvo em broll_oficial/,
+  nunca um clipe de vídeo (não existe no repo) nem uma alegação de "leak"
+  inventada (isso o quality_gate.py já bloqueia de propósito — ver
+  quality_gate.py e README, é o tipo de conteúdo que gerou processo da
+  Take-Two contra outros canais).
+- A trilha sonora de fundo já roda por baixo do vídeo inteiro (ver
+  _misturar_musica) e as frases de impacto/CTA já saem com a voz mais
+  "animada" (ver tts.py) — ajuda a dar a sensação de ritmo mesmo sem
+  efeito de câmera (zoom/pan tipo Ken Burns foi avaliado e descartado por
+  enquanto: é frágil em cima de ffmpeg puro e arriscava quebrar TODOS os
+  renders de uma vez só sem forma fácil de testar antes).
+
 IMPORTANTE sobre as imagens em assets/broll_oficial/:
 - Só coloque aí screenshots/frames de material OFICIAL já liberado
   (trailers, Extended Look, Launch Trailer, site oficial da Rockstar).
@@ -46,10 +70,24 @@ MOUTH_FRAME_SEC = 0.28
 CTA_POSE = "apontando.png"
 # Posição aproximada (no canvas 800x800 de gerar_mascote.py) da ponta do
 # dedo indicador na pose "apontando" - usada pra ancorar o gráfico de
-# like/inscrição exatamente onde o mascote está apontando.
+# like/inscrição exatamente onde o mascote está apontando. Só vale pra
+# pose desenhada sem flip (lado "esquerda") - por isso CTA sempre fica
+# desse lado (ver _frame_with_caption).
 _CTA_FINGERTIP_REL = (724, 194)
 _mascote_cache: dict[str, Image.Image] = {}
 
+# Lado que o mascote fica em cada cena "normal" (fala contínua) - alterna
+# cena a cena pra dar sensação de posição mudando (ver docstring do
+# módulo). CTA e cenas de "destaque" têm posição própria, não usam isso.
+_LADOS = ("esquerda", "direita")
+
+def _lado_da_cena(index: int) -> str:
+    return _LADOS[index % len(_LADOS)]
+
+# A cada quantas frases (não-CTA) insere uma cena de "destaque" full-bleed
+# (ver docstring do módulo). 4 funciona bem tanto pros shorts curtos (pelo
+# menos 1 destaque aparece) quanto pro vídeo longo (não vira repetitivo).
+DESTAQUE_A_CADA = 4
 
 def _mouth_poses_for_duration(duration_sec: float) -> list[str]:
     """Lista de poses (boca) a percorrer ao longo da frase, pra dar
@@ -62,13 +100,11 @@ def _mouth_poses_for_duration(duration_sec: float) -> list[str]:
 # não rodou), o vídeo sai só com a narração (sem travar).
 MUSICA_VOLUME = 0.10  # bem baixo, pra não competir com a narração
 
-
 def _load_font(size: int) -> ImageFont.FreeTypeFont:
     for path in FONT_CANDIDATES:
         if Path(path).exists():
             return ImageFont.truetype(path, size)
     return ImageFont.load_default()
-
 
 def _load_mascote(pose_filename: str) -> Image.Image | None:
     if pose_filename in _mascote_cache:
@@ -80,11 +116,13 @@ def _load_mascote(pose_filename: str) -> Image.Image | None:
     _mascote_cache[pose_filename] = img
     return img
 
-
-def _desenhar_mascote(img: Image.Image, pose_filename: str, bar_h: int, w: int, h: int) -> tuple[int, int, float] | None:
-    """Desenha o mascote na pose indicada. Retorna (x, y, escala) de onde
-    ele foi desenhado - usado pra alinhar o gráfico de CTA com o dedo que
-    aponta na pose "apontando"."""
+def _desenhar_mascote(img: Image.Image, pose_filename: str, bar_h: int, w: int, h: int, lado: str = "esquerda") -> tuple[int, int, float] | None:
+    """Desenha o mascote na pose indicada, no lado pedido ("esquerda" ou
+    "direita" - cena a cena, pra dar sensação de posição mudando em vez de
+    personagem grudado sempre no mesmo canto). Retorna (x, y, escala) de
+    onde ele foi desenhado - usado pra alinhar o gráfico de CTA com o dedo
+    que aponta na pose "apontando" (CTA sempre chama isso com lado
+    "esquerda", pra manter essa matemática simples e confiável)."""
     mascote = _load_mascote(pose_filename)
     if mascote is None:
         return None
@@ -93,11 +131,14 @@ def _desenhar_mascote(img: Image.Image, pose_filename: str, bar_h: int, w: int, 
     novo_tam = (int(mascote.width * escala), alvo_h)
     mascote_r = mascote.resize(novo_tam, Image.LANCZOS)
     margin_x = int(w * 0.04)
-    x = margin_x
+    if lado == "direita":
+        mascote_r = mascote_r.transpose(Image.FLIP_LEFT_RIGHT)
+        x = w - margin_x - novo_tam[0]
+    else:
+        x = margin_x
     y = max(h - bar_h - novo_tam[1] - int(h * 0.015), 0)
     img.paste(mascote_r, (x, y), mascote_r)
     return (x, y, escala)
-
 
 def _draw_cta_grafico(draw: ImageDraw.ImageDraw, posicao: tuple[int, int, float], w: int, h: int) -> None:
     """Gráfico de "curta e se inscreva" ancorado no dedo apontando do
@@ -169,13 +210,12 @@ def _draw_cta_grafico(draw: ImageDraw.ImageDraw, posicao: tuple[int, int, float]
         p1 = (origem[0] + (fx - origem[0]) * t1, origem[1] + (fy - origem[1]) * t1)
         draw.line([p0, p1], fill=(255, 255, 255, 200), width=4)
 
-
-def _background_image(kind: str, index: int) -> Image.Image:
+def _background_image(kind: str, index: int, offset: int = 0) -> Image.Image:
     w, h = RESOLUTIONS[kind]
     broll_dir = config.ASSETS_DIR / "broll_oficial"
     images = sorted(broll_dir.glob("*.jpg")) + sorted(broll_dir.glob("*.png"))
     if images:
-        src = Image.open(images[index % len(images)]).convert("RGB")
+        src = Image.open(images[(index + offset) % len(images)]).convert("RGB")
         # cobre o frame mantendo proporção (crop central)
         src_ratio, target_ratio = src.width / src.height, w / h
         if src_ratio > target_ratio:
@@ -187,7 +227,6 @@ def _background_image(kind: str, index: int) -> Image.Image:
         return src.resize((w, h))
     # placeholder neutro até você colocar imagens oficiais em assets/broll_oficial/
     return Image.new("RGB", (w, h), (18, 18, 24))
-
 
 def _wrap_by_pixels(draw: ImageDraw.ImageDraw, text: str, font: ImageFont.FreeTypeFont, max_width: int) -> list[str]:
     """Quebra linha medindo largura real do texto renderizado (não por
@@ -205,7 +244,6 @@ def _wrap_by_pixels(draw: ImageDraw.ImageDraw, text: str, font: ImageFont.FreeTy
         lines.append(current)
     return lines
 
-
 def _truncate_by_pixels(draw: ImageDraw.ImageDraw, text: str, font: ImageFont.FreeTypeFont, max_width: int) -> str:
     if draw.textlength(text, font=font) <= max_width:
         return text
@@ -213,10 +251,9 @@ def _truncate_by_pixels(draw: ImageDraw.ImageDraw, text: str, font: ImageFont.Fr
         text = text[:-1]
     return text + "…"
 
-
 def _frame_with_caption(
     kind: str, index: int, titulo: str, caption: str,
-    pose_filename: str, cta: bool = False, sub: int = 0,
+    pose_filename: str, cta: bool = False, sub: int = 0, lado: str = "esquerda",
 ) -> Path:
     w, h = RESOLUTIONS[kind]
     img = _background_image(kind, index)
@@ -237,8 +274,9 @@ def _frame_with_caption(
 
     # mascote original do canal, na pose pedida (alterna boca dentro da
     # própria frase pra dar sensação de fala contínua; na frase de CTA
-    # fica fixo na pose "apontando")
-    posicao = _desenhar_mascote(img, pose_filename, bar_h, w, h)
+    # fica fixo na pose "apontando"). CTA sempre do lado esquerdo (ver
+    # _CTA_FINGERTIP_REL); fora isso, alterna lado cena a cena.
+    posicao = _desenhar_mascote(img, pose_filename, bar_h, w, h, lado=("esquerda" if cta else lado))
 
     # nome/título discreto no topo (mantém identidade do canal em todo vídeo)
     title_font = _load_font(int(h * 0.028))
@@ -255,10 +293,57 @@ def _frame_with_caption(
     img.save(out_path)
     return out_path
 
+def _frame_destaque(kind: str, index: int, titulo: str, caption: str, pose_filename: str) -> Path:
+    """Cena de "destaque" full-bleed: o print de broll ocupa a tela quase
+    toda (tarja de legenda bem menor que o normal) e o mascote encolhe pra
+    um canto, na pose "apontando" — como se estivesse revelando/mostrando
+    aquele print pro espectador. Usada periodicamente (DESTAQUE_A_CADA)
+    pra quebrar a repetição visual da cena "padrão" (mascote grande +
+    legenda grande), sem inventar clipe de trailer que não existe no repo
+    nem reaproveitar a mesma imagem da cena vizinha (ver offset em
+    _background_image)."""
+    w, h = RESOLUTIONS[kind]
+    img = _background_image(kind, index, offset=7)
+    draw = ImageDraw.Draw(img, "RGBA")
+    margin_x = int(w * 0.06)
+    text_max_width = w - 2 * margin_x
+
+    caption_font = _load_font(int(h * 0.034))
+    wrapped = _wrap_by_pixels(draw, caption, caption_font, text_max_width)
+    line_h = int(h * 0.046)
+    bar_h = line_h * len(wrapped) + int(h * 0.035)
+    draw.rectangle([0, h - bar_h, w, h], fill=(0, 0, 0, 165))
+    y = h - bar_h + int(h * 0.015)
+    for line in wrapped:
+        draw.text((margin_x, y), line, font=caption_font, fill=(255, 255, 255, 255))
+        y += line_h
+
+    # mascote pequeno no canto direito (oposto da legenda), na pose
+    # apontando - sempre com flip, encarando pro centro da imagem como se
+    # estivesse mostrando o print atrás dele.
+    mascote = _load_mascote(pose_filename)
+    if mascote is not None:
+        alvo_h = int(h * 0.16)
+        escala = alvo_h / mascote.height
+        novo_tam = (int(mascote.width * escala), alvo_h)
+        mascote_r = mascote.resize(novo_tam, Image.LANCZOS).transpose(Image.FLIP_LEFT_RIGHT)
+        mx = w - int(w * 0.04) - novo_tam[0]
+        my = max(h - bar_h - novo_tam[1] - int(h * 0.02), 0)
+        img.paste(mascote_r, (mx, my), mascote_r)
+
+    title_font = _load_font(int(h * 0.028))
+    draw.rectangle([0, 0, w, int(h * 0.065)], fill=(0, 0, 0, 140))
+    title_fit = _truncate_by_pixels(draw, titulo, title_font, text_max_width)
+    draw.text((margin_x, int(h * 0.017)), title_fit, font=title_font, fill=(255, 255, 255, 255))
+
+    tmp_dir = config.ASSETS_DIR / "tmp" / "frames"
+    tmp_dir.mkdir(parents=True, exist_ok=True)
+    out_path = tmp_dir / f"{kind}_{index:03d}_destaque.png"
+    img.save(out_path)
+    return out_path
 
 def _run(cmd: list[str]) -> None:
     subprocess.run(cmd, check=True, capture_output=True)
-
 
 def _escolher_musica() -> Path | None:
     musica_dir = config.ASSETS_DIR / "musica"
@@ -266,7 +351,6 @@ def _escolher_musica() -> Path | None:
     if not faixas:
         return None
     return random.choice(faixas)
-
 
 def _misturar_musica(video_sem_musica: Path, out_path: Path) -> None:
     faixa = _escolher_musica()
@@ -286,7 +370,6 @@ def _misturar_musica(video_sem_musica: Path, out_path: Path) -> None:
         str(out_path),
     ])
 
-
 def render_video(kind: str, titulo: str, segments: list[Segment], out_path: Path) -> Path:
     if not segments:
         raise ValueError("Nenhum segmento de narração pra montar o vídeo.")
@@ -298,6 +381,7 @@ def render_video(kind: str, titulo: str, segments: list[Segment], out_path: Path
     for i, seg in enumerate(segments):
         clip_path = clip_dir / f"clip_{i:03d}.mp4"
         w, h = RESOLUTIONS[kind]
+        eh_destaque = (not seg.is_cta) and i > 0 and (i % DESTAQUE_A_CADA == DESTAQUE_A_CADA - 1)
 
         if seg.is_cta:
             # frase de CTA: 1 frame só (pose "apontando" + gráfico de
@@ -315,15 +399,32 @@ def render_video(kind: str, titulo: str, segments: list[Segment], out_path: Path
                 "-vf", f"scale={w}:{h}",
                 str(clip_path),
             ])
+        elif eh_destaque:
+            # cena de "destaque" full-bleed periódica (ver _frame_destaque
+            # e docstring do módulo) - quebra a repetição visual, estilo
+            # "sempre tem algo acontecendo na tela".
+            frame_path = _frame_destaque(kind, i, titulo, seg.text, CTA_POSE)
+            _run([
+                "ffmpeg", "-y",
+                "-loop", "1", "-i", str(frame_path),
+                "-i", str(seg.audio_path),
+                "-c:v", "libx264", "-tune", "stillimage", "-c:a", "aac",
+                "-b:a", "192k", "-pix_fmt", "yuv420p",
+                "-t", str(seg.duration_sec),
+                "-vf", f"scale={w}:{h}",
+                str(clip_path),
+            ])
         else:
             # frase normal: gera vários sub-quadros trocando a pose da boca
             # (falando_a/falando_b) ao longo da própria frase, concatenados
             # num mini-vídeo mudo via ffmpeg concat demuxer, e só depois
             # junta com o áudio da frase - dá a sensação de boca mexendo
             # continuamente em vez de 1 pose travada por frase inteira.
+            # Lado do mascote alterna cena a cena (ver _lado_da_cena).
+            lado = _lado_da_cena(i)
             poses = _mouth_poses_for_duration(seg.duration_sec)
             frame_paths = [
-                _frame_with_caption(kind, i, titulo, seg.text, pose, sub=j)
+                _frame_with_caption(kind, i, titulo, seg.text, pose, sub=j, lado=lado)
                 for j, pose in enumerate(poses)
             ]
             sub_dur = seg.duration_sec / len(frame_paths)
