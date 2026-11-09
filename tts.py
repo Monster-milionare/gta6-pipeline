@@ -6,6 +6,17 @@ não-oficial, mas é a opção free mais usada em canais faceless).
 Divide o roteiro em frases e gera 1 áudio por frase. Isso é o que permite
 sincronizar a legenda com a narração sem precisar rodar Whisper (transcrição
 por IA) pra descobrir os tempos — cada frase já tem duração conhecida.
+
+SOBRE EXPRESSIVIDADE DE VOZ (honesto, pra não vender ilusão): edge-tts é a
+melhor opção 100% grátis que existe, mas ele usa um modelo de prosódia fixo
+por voz — não é um modelo conversacional tipo o do ChatGPT/Gemini, que gera
+entonação nova a cada frase com base no significado. Pra compensar isso,
+aqui a gente varia rate/pitch por frase E aumenta a energia (rate/pitch mais
+altos) em frases de impacto (fala por exclamação/pergunta, ou CTA de
+like/inscrição) — não é 100% igual a uma voz "viva", mas já tira bastante
+do efeito robótico de "ler tudo no mesmo tom". Pra ter a voz do nível
+ChatGPT/Gemini de verdade precisaria de um serviço pago (ex.: ElevenLabs,
+que tem cota free mas MUITO pequena pro volume diário desse canal).
 """
 import random
 import re
@@ -40,14 +51,21 @@ def _dedup_preservando_ordem(itens: list[str]) -> list[str]:
 VOICE_PREFERENCIAS = _dedup_preservando_ordem(VOICE_PREFERENCIAS)
 VOICE = VOICE_PREFERENCIAS[0]
 
-# Pequena variação de ritmo/tom por frase pra soar menos "robótico" (uma
-# pessoa de verdade nunca fala toda frase exatamente no mesmo tom/ritmo).
-# edge-tts aceita rate/pitch direto, sem precisar escrever SSML na mão.
+# Variação de ritmo/tom por frase pra soar menos "robótico" (uma pessoa de
+# verdade nunca fala toda frase exatamente no mesmo tom/ritmo). edge-tts
+# aceita rate/pitch direto, sem precisar escrever SSML na mão.
 # IMPORTANTE: edge-tts exige sinal explicito (+/-) mesmo pra zero -
 # "0%" sozinho derruba com ValueError ("Invalid rate '0%'."), por isso
 # "+0%" aqui (bug real que quebrou a publicação em produção - corrigido).
-_RATE_VARIACAO = ("+2%", "+6%", "-2%", "+4%", "+0%")
-_PITCH_VARIACAO = ("+0Hz", "+2Hz", "-2Hz", "+1Hz")
+_RATE_VARIACAO = ("+0%", "+3%", "-3%", "+6%", "-5%", "+9%", "-1%")
+_PITCH_VARIACAO = ("+0Hz", "+2Hz", "-2Hz", "+4Hz", "-3Hz", "+1Hz")
+
+# Frases de impacto (exclamação/pergunta) e CTA de like/inscrição ganham
+# rate/pitch mais altos de propósito — simula a "empolgação" que uma pessoa
+# de verdade colocaria nesse tipo de frase, é o maior fator de diferença
+# entre uma narração que soa "lida" e uma que soa "falada com energia".
+_RATE_VARIACAO_ENERGICA = ("+9%", "+13%", "+17%", "+11%", "+15%")
+_PITCH_VARIACAO_ENERGICA = ("+4Hz", "+6Hz", "+8Hz", "+5Hz")
 
 # Pausa curta entre frases (silêncio no fim do áudio) — sem isso a
 # narração gruda uma frase na outra sem respirar, o que é um dos
@@ -65,6 +83,16 @@ def _split_sentences(text: str) -> list[str]:
     text = re.sub(r"\s+", " ", text).strip()
     parts = re.split(r"(?<=[.!?])\s+", text)
     return [p.strip() for p in parts if p.strip()]
+
+def _eh_frase_energica(sentence: str, cta: bool) -> bool:
+    """CTA sempre entra com energia; fora isso, qualquer frase que termine
+    (ou tenha) exclamação/interrogação ganha rate/pitch mais altos — é o
+    jeito mais simples e confiável (sem precisar de IA extra) de aproximar
+    a entonação do que uma pessoa real faria com essas frases."""
+    if cta:
+        return True
+    stripped = sentence.rstrip()
+    return stripped.endswith(("!", "?")) or "!" in sentence or "?" in sentence
 
 def _probe_duration(path: Path) -> float:
     result = subprocess.run(
@@ -100,14 +128,20 @@ def synthesize_sentences(text: str, out_dir: Path, cta: bool = False) -> list[Se
 
     cta=True marca o(s) segmento(s) gerados como pedido de like/inscrição
     (usado por render.py pra trocar a pose do mascote pra "apontando" e
-    mostrar o gráfico de like/inscrição na tela nesse trecho)."""
+    mostrar o gráfico de like/inscrição na tela nesse trecho) e também faz
+    esse segmento ser narrado com a variação de rate/pitch "energética"
+    (ver _eh_frase_energica)."""
     out_dir.mkdir(parents=True, exist_ok=True)
     sentences = _split_sentences(text)
     segments = []
     for i, sentence in enumerate(sentences):
         audio_path = out_dir / f"{i:03d}.mp3"
-        rate = random.choice(_RATE_VARIACAO)
-        pitch = random.choice(_PITCH_VARIACAO)
+        if _eh_frase_energica(sentence, cta):
+            rate = random.choice(_RATE_VARIACAO_ENERGICA)
+            pitch = random.choice(_PITCH_VARIACAO_ENERGICA)
+        else:
+            rate = random.choice(_RATE_VARIACAO)
+            pitch = random.choice(_PITCH_VARIACAO)
         _synth_com_fallback(sentence, audio_path, rate, pitch)
         duration = _probe_duration(audio_path) + PAUSA_ENTRE_FRASES_SEC
         segments.append(Segment(text=sentence, audio_path=audio_path, duration_sec=duration, is_cta=cta))
