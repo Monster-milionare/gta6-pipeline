@@ -36,11 +36,26 @@ FONT_CANDIDATES = [
 
 # Mascote original do canal (protagonista estilo Vice City/Miami) - ver
 # assets/mascote/gerar_mascote.py (gerado em runtime pelo workflow, sem
-# assets binarios versionados no repo). Alterna as duas poses de "falando"
-# a cada frase pra dar uma animação simples de boca mexendo (estilo
-# stop-motion) sem precisar de video real.
-MASCOTE_POSES = ["falando_a.png", "falando_b.png"]
+# assets binarios versionados no repo). Alterna as poses "falando_a"/
+# "falando_b" dentro de CADA frase (não mais 1 pose por frase inteira) pra
+# simular boca mexendo de verdade enquanto a narração toca - estilo
+# stop-motion, trocando a cada MOUTH_FRAME_SEC segundos. Na frase de CTA
+# (pedido de like/inscrição) usa a pose "apontando" fixa + gráfico.
+MOUTH_CYCLE_POSES = ["falando_a.png", "falando_b.png"]
+MOUTH_FRAME_SEC = 0.28
+CTA_POSE = "apontando.png"
+# Posição aproximada (no canvas 800x800 de gerar_mascote.py) da ponta do
+# dedo indicador na pose "apontando" - usada pra ancorar o gráfico de
+# like/inscrição exatamente onde o mascote está apontando.
+_CTA_FINGERTIP_REL = (724, 194)
 _mascote_cache: dict[str, Image.Image] = {}
+
+
+def _mouth_poses_for_duration(duration_sec: float) -> list[str]:
+    """Lista de poses (boca) a percorrer ao longo da frase, pra dar
+    sensação de fala contínua em vez de 1 pose congelada por frase."""
+    n = max(2, round(duration_sec / MOUTH_FRAME_SEC))
+    return [MOUTH_CYCLE_POSES[i % len(MOUTH_CYCLE_POSES)] for i in range(n)]
 
 # Trilha de fundo 100% original, sintetizada em runtime - ver
 # assets/musica/gerar_musica.py. Se a pasta estiver vazia (gerador ainda
@@ -66,19 +81,93 @@ def _load_mascote(pose_filename: str) -> Image.Image | None:
     return img
 
 
-def _desenhar_mascote(img: Image.Image, index: int, bar_h: int, w: int, h: int) -> None:
-    pose_filename = MASCOTE_POSES[index % len(MASCOTE_POSES)]
+def _desenhar_mascote(img: Image.Image, pose_filename: str, bar_h: int, w: int, h: int) -> tuple[int, int, float] | None:
+    """Desenha o mascote na pose indicada. Retorna (x, y, escala) de onde
+    ele foi desenhado - usado pra alinhar o gráfico de CTA com o dedo que
+    aponta na pose "apontando"."""
     mascote = _load_mascote(pose_filename)
     if mascote is None:
-        return
+        return None
     alvo_h = int(h * 0.26)
     escala = alvo_h / mascote.height
     novo_tam = (int(mascote.width * escala), alvo_h)
     mascote_r = mascote.resize(novo_tam, Image.LANCZOS)
     margin_x = int(w * 0.04)
     x = margin_x
-    y = h - bar_h - novo_tam[1] - int(h * 0.015)
-    img.paste(mascote_r, (x, max(y, 0)), mascote_r)
+    y = max(h - bar_h - novo_tam[1] - int(h * 0.015), 0)
+    img.paste(mascote_r, (x, y), mascote_r)
+    return (x, y, escala)
+
+
+def _draw_cta_grafico(draw: ImageDraw.ImageDraw, posicao: tuple[int, int, float], w: int, h: int) -> None:
+    """Gráfico de "curta e se inscreva" ancorado no dedo apontando do
+    mascote (pose CTA_POSE) - sem usar o logo/ícone oficial do YouTube,
+    só formas geométricas originais (coração/joia estilizada + texto)."""
+    x, y, escala = posicao
+    fx = x + _CTA_FINGERTIP_REL[0] * escala
+    fy = y + _CTA_FINGERTIP_REL[1] * escala
+
+    # Mede o texto de verdade (igual _wrap_by_pixels/_truncate_by_pixels já
+    # fazem pra legenda) e encolhe a fonte se precisar, em vez de supor uma
+    # largura fixa de caixa — no formato vertical (short, w menor) um texto
+    # fixo com fonte fixa vazava pra fora do frame.
+    margin = int(w * 0.04)
+    max_box_w = w - 2 * margin
+    box_h = int(h * 0.072)
+    icon_r = int(box_h * 0.30)
+    icon_left_pad = int(box_h * 0.30)
+    texto_pad_left = int(box_h * 1.05)
+    texto_pad_right = int(box_h * 0.35)
+    texto = "CURTA E SE INSCREVA"
+
+    font_size = int(box_h * 0.40)
+    font = _load_font(font_size)
+    texto_w = draw.textlength(texto, font=font)
+    box_w = texto_pad_left + texto_w + texto_pad_right
+    while box_w > max_box_w and font_size > 14:
+        font_size -= 2
+        font = _load_font(font_size)
+        texto_w = draw.textlength(texto, font=font)
+        box_w = texto_pad_left + texto_w + texto_pad_right
+    box_w = min(int(box_w), max_box_w)
+
+    bx = int(fx - box_w * 0.35)
+    bx = min(max(bx, margin), w - box_w - margin)
+    by = max(int(fy - box_h * 1.3), int(h * 0.075))
+
+    draw.rounded_rectangle(
+        [bx, by, bx + box_w, by + box_h], radius=int(box_h * 0.25),
+        fill=(220, 20, 60, 235), outline=(255, 255, 255, 255), width=4,
+    )
+    icon_cx, icon_cy = bx + icon_left_pad + icon_r, by + box_h // 2
+    draw.ellipse(
+        [icon_cx - icon_r, icon_cy - icon_r, icon_cx + icon_r, icon_cy + icon_r],
+        fill=(255, 255, 255, 255),
+    )
+    draw.polygon([
+        (icon_cx - icon_r * 0.4, icon_cy + icon_r * 0.55),
+        (icon_cx - icon_r * 0.1, icon_cy - icon_r * 0.55),
+        (icon_cx + icon_r * 0.1, icon_cy - icon_r * 0.55),
+        (icon_cx + icon_r * 0.4, icon_cy + icon_r * 0.55),
+    ], fill=(220, 20, 60, 255))
+
+    tx = bx + texto_pad_left
+    bbox = draw.textbbox((0, 0), texto, font=font)
+    text_h = bbox[3] - bbox[1]
+    ty = by + (box_h - text_h) // 2 - bbox[1]
+    draw.text((tx, ty), texto, font=font, fill=(255, 255, 255, 255))
+
+    # linha pontilhada ligando o gráfico ao dedo (reforça o "apontando pra
+    # isso aqui" em vez de só coincidir visualmente por acaso)
+    origem = (bx + box_w * 0.3, by + box_h)
+    passos = 9
+    for s in range(passos):
+        if s % 2 == 0:
+            continue
+        t0, t1 = s / passos, (s + 1) / passos
+        p0 = (origem[0] + (fx - origem[0]) * t0, origem[1] + (fy - origem[1]) * t0)
+        p1 = (origem[0] + (fx - origem[0]) * t1, origem[1] + (fy - origem[1]) * t1)
+        draw.line([p0, p1], fill=(255, 255, 255, 200), width=4)
 
 
 def _background_image(kind: str, index: int) -> Image.Image:
@@ -125,7 +214,10 @@ def _truncate_by_pixels(draw: ImageDraw.ImageDraw, text: str, font: ImageFont.Fr
     return text + "…"
 
 
-def _frame_with_caption(kind: str, index: int, titulo: str, caption: str) -> Path:
+def _frame_with_caption(
+    kind: str, index: int, titulo: str, caption: str,
+    pose_filename: str, cta: bool = False, sub: int = 0,
+) -> Path:
     w, h = RESOLUTIONS[kind]
     img = _background_image(kind, index)
     draw = ImageDraw.Draw(img, "RGBA")
@@ -143,8 +235,10 @@ def _frame_with_caption(kind: str, index: int, titulo: str, caption: str) -> Pat
         draw.text((margin_x, y), line, font=caption_font, fill=(255, 255, 255, 255))
         y += line_h
 
-    # mascote original do canal, "falando" (alterna pose a cada frase)
-    _desenhar_mascote(img, index, bar_h, w, h)
+    # mascote original do canal, na pose pedida (alterna boca dentro da
+    # própria frase pra dar sensação de fala contínua; na frase de CTA
+    # fica fixo na pose "apontando")
+    posicao = _desenhar_mascote(img, pose_filename, bar_h, w, h)
 
     # nome/título discreto no topo (mantém identidade do canal em todo vídeo)
     title_font = _load_font(int(h * 0.028))
@@ -152,9 +246,12 @@ def _frame_with_caption(kind: str, index: int, titulo: str, caption: str) -> Pat
     title_fit = _truncate_by_pixels(draw, titulo, title_font, text_max_width)
     draw.text((margin_x, int(h * 0.017)), title_fit, font=title_font, fill=(255, 255, 255, 255))
 
+    if cta and posicao is not None:
+        _draw_cta_grafico(draw, posicao, w, h)
+
     tmp_dir = config.ASSETS_DIR / "tmp" / "frames"
     tmp_dir.mkdir(parents=True, exist_ok=True)
-    out_path = tmp_dir / f"{kind}_{index:03d}.png"
+    out_path = tmp_dir / f"{kind}_{index:03d}_{sub:02d}.png"
     img.save(out_path)
     return out_path
 
@@ -199,18 +296,59 @@ def render_video(kind: str, titulo: str, segments: list[Segment], out_path: Path
     clip_paths = []
 
     for i, seg in enumerate(segments):
-        frame_path = _frame_with_caption(kind, i, titulo, seg.text)
         clip_path = clip_dir / f"clip_{i:03d}.mp4"
-        _run([
-            "ffmpeg", "-y",
-            "-loop", "1", "-i", str(frame_path),
-            "-i", str(seg.audio_path),
-            "-c:v", "libx264", "-tune", "stillimage", "-c:a", "aac",
-            "-b:a", "192k", "-pix_fmt", "yuv420p",
-            "-t", str(seg.duration_sec),
-            "-vf", f"scale={RESOLUTIONS[kind][0]}:{RESOLUTIONS[kind][1]}",
-            str(clip_path),
-        ])
+        w, h = RESOLUTIONS[kind]
+
+        if seg.is_cta:
+            # frase de CTA: 1 frame só (pose "apontando" + gráfico de
+            # like/inscrição), igual ao esquema antigo - não precisa de
+            # boca mexendo nesse trecho, o importante é o dedo + gráfico
+            # ficarem parados e legíveis.
+            frame_path = _frame_with_caption(kind, i, titulo, seg.text, CTA_POSE, cta=True)
+            _run([
+                "ffmpeg", "-y",
+                "-loop", "1", "-i", str(frame_path),
+                "-i", str(seg.audio_path),
+                "-c:v", "libx264", "-tune", "stillimage", "-c:a", "aac",
+                "-b:a", "192k", "-pix_fmt", "yuv420p",
+                "-t", str(seg.duration_sec),
+                "-vf", f"scale={w}:{h}",
+                str(clip_path),
+            ])
+        else:
+            # frase normal: gera vários sub-quadros trocando a pose da boca
+            # (falando_a/falando_b) ao longo da própria frase, concatenados
+            # num mini-vídeo mudo via ffmpeg concat demuxer, e só depois
+            # junta com o áudio da frase - dá a sensação de boca mexendo
+            # continuamente em vez de 1 pose travada por frase inteira.
+            poses = _mouth_poses_for_duration(seg.duration_sec)
+            frame_paths = [
+                _frame_with_caption(kind, i, titulo, seg.text, pose, sub=j)
+                for j, pose in enumerate(poses)
+            ]
+            sub_dur = seg.duration_sec / len(frame_paths)
+            lista_path = clip_dir / f"mouth_list_{i:03d}.txt"
+            linhas = []
+            for p in frame_paths:
+                linhas.append(f"file '{p.resolve()}'")
+                linhas.append(f"duration {sub_dur:.3f}")
+            linhas.append(f"file '{frame_paths[-1].resolve()}'")  # concat demuxer exige repetir o último
+            lista_path.write_text("\n".join(linhas), encoding="utf-8")
+
+            video_mudo = clip_dir / f"mouth_{i:03d}.mp4"
+            _run([
+                "ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", str(lista_path),
+                "-vf", f"scale={w}:{h}", "-pix_fmt", "yuv420p",
+                "-c:v", "libx264", "-fps_mode", "vfr",
+                str(video_mudo),
+            ])
+            _run([
+                "ffmpeg", "-y",
+                "-i", str(video_mudo), "-i", str(seg.audio_path),
+                "-c:v", "copy", "-c:a", "aac", "-b:a", "192k",
+                "-t", str(seg.duration_sec),
+                str(clip_path),
+            ])
         clip_paths.append(clip_path)
 
     concat_list = clip_dir / "concat_list.txt"
