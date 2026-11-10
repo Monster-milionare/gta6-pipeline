@@ -1,44 +1,64 @@
 #!/usr/bin/env python3
 """
-Roda várias vezes ao dia (via GitHub Actions agendado — ver README). A cada
-execução, pega o PRÓXIMO item já aprovado e ainda não publicado, gera a
-narração frase a frase, monta o vídeo com ffmpeg e agenda o upload no
-YouTube.
+Publica o lote do dia no YouTube. Pra cada item aprovado e ainda não
+publicado: gera a narração, monta o vídeo (render.py) e sobe pro YouTube.
 
-IMPORTANTE (auto-recuperação): o workflow sempre chama "python publish.py
---all" agora, não só "python publish.py". Isso existe porque o cron do
-GitHub Actions não é confiável de verdade — na prática, execuções agendadas
-saem atrasadas (observamos horários previstos pra 09h/06h BRT rodando só
-às 12h) ou simplesmente não disparam nesse dia. Se cada execução só
-processasse 1 item, um agendamento perdido virava um short que nunca sai
-do forno. Com --all, QUALQUER execução (mesmo atrasada, mesmo substituindo
-2-3 horários perdidos) processa tudo que ainda falta publicar no dia, uma
-de cada vez, com uma pausa aleatória real entre cada item (ver
-_ESPERA_ENTRE_ITENS_MIN) pra continuar parecendo um canal publicando no
-ritmo humano, não uma rajada de uploads simultâneos (o tipo de padrão que
-o sistema anti-spam do YouTube usa pra agrupar/banir canais - ver README).
+COMO ISSO SOBREVIVE AO CRON RUIM DO GITHUB (motivo de já ter ficado dias
+sem sair vídeo): o agendador do GitHub Actions atrasa horas ou nem dispara.
+Então o desenho aqui é "qualquer execução resolve o dia inteiro":
+
+1. UMA execução sobe TODOS os itens pendentes do dia de uma vez, e quem
+   espalha os vídeos ao longo do dia é o próprio YouTube: cada item sobe
+   como privado com "publishAt" no horário-alvo dele (SLOT_LONGO /
+   SLOTS_SHORTS, horário de Brasília). Não tem mais "sleep" de 12-25min
+   entre itens segurando a máquina (isso queimava a cota grátis de minutos
+   do Actions e deixava a execução horas exposta a falha).
+2. Se a execução sair atrasada e o horário-alvo de um item já passou, ele
+   sai na hora (ou GAP_MIN minutos depois do anterior, pra não virar
+   rajada de uploads públicos no mesmo minuto).
+3. O status "Publicado: sim" é salvo no repositório (git push) LOGO APÓS
+   cada item, não só no fim - se a execução morrer no meio, a próxima não
+   sobe o mesmo vídeo duas vezes.
+4. Se um item der erro (render, upload...), ele é pulado e os outros
+   continuam - um item quebrado não trava mais a fila inteira. A execução
+   termina vermelha no fim pra ficar visível na aba Actions.
+5. O "dia" é sempre o dia em Brasília (não UTC), então execução atrasada
+   de noite não cai no dia seguinte por engano.
 
 Uso: python publish.py [--all]
 """
+import os
 import random
+import subprocess
 import sys
 import time
-from datetime import date as date_cls
+import traceback
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 import config
-from content_batch import load_batch, mark_item_published, next_unpublished
+from content_batch import load_batch, mark_item_published
 from gerar_thumbnail import gerar_thumbnail
 from render import render_video
 from tts import synthesize_sentences
 from upload import set_thumbnail, upload_video
 
+FUSO = ZoneInfo("America/Sao_Paulo")
+
+# Horários-alvo de publicação (Brasília). Longo perto do almoço, shorts
+# espalhados do almoço até a noite (picos de uso de celular no Brasil).
+SLOT_LONGO = "11:40"
+SLOTS_SHORTS = ["12:20", "14:10", "16:40", "18:30", "20:40"]
+# Distância mínima entre dois vídeos indo ao ar (quando os horários-alvo
+# já passaram e a execução está "correndo atrás").
+GAP_MIN = 25
+# "publishAt" precisa estar no futuro; menos que isso de folga, publica na hora.
+ANTECEDENCIA_MIN = 12
+
 # Pedido de like/inscrição: fixo e programático (não depende do LLM lembrar
-# de pedir isso no roteiro, que seria inconsistente) - roda no fim de todo
-# vídeo. Varia entre algumas frases pra não soar repetitivo pra quem
-# assiste vários vídeos do canal seguidos; render.py detecta
-# Segment.is_cta=True e troca o mascote pra pose "apontando" + desenha o
-# gráfico de like/inscrição nesse trecho (ver render.py).
+# de pedir isso no roteiro) - roda no fim de todo vídeo. render.py detecta
+# Segment.is_cta=True e anima o botão de like/inscrição nesse trecho.
 CTA_FRASES = [
     "Curte o vídeo e se inscreve no canal pra não perder nenhuma notícia de GTA VI.",
     "Se esse vídeo te ajudou, deixa o like e se inscreve aqui no canal.",
@@ -46,22 +66,15 @@ CTA_FRASES = [
     "Deixa o like, comenta o que você achou e se inscreve pra ficar por dentro de GTA VI.",
 ]
 
-# Pausa real entre itens quando há mais de 1 pra publicar na mesma
-# execução (catch-up) - minutos. Faixa larga o bastante pra não parecer
-# robótico, curta o bastante pra ainda caber tudo dentro do limite de 6h
-# de job do GitHub Actions mesmo processando o lote inteiro do zero.
-_ESPERA_ENTRE_ITENS_MIN = (12, 25)
 
 def _cta_frase(item) -> str:
-    # escolha determinística por item (a mesma frase se o vídeo for
-    # reprocessado), variando entre os itens do lote.
-    idx = hash(item.item_id) % len(CTA_FRASES)
+    idx = sum(ord(c) for c in item.item_id) % len(CTA_FRASES)
     return CTA_FRASES[idx]
 
+
 def _gerar_thumbnail_seguro(item) -> Path | None:
-    """Nunca deixa um erro na geração da thumbnail derrubar o publish.py -
-    pior caso, o vídeo sai sem thumbnail customizada (YouTube usa um frame
-    aleatório), o que é bem melhor que travar a publicação inteira."""
+    """Erro na thumbnail nunca derruba a publicação - pior caso o vídeo
+    sai sem thumbnail customizada."""
     try:
         thumb_path = config.ASSETS_DIR / "tmp" / f"{item.item_id}_thumb.jpg"
         return gerar_thumbnail(item.titulo, thumb_path)
@@ -69,17 +82,17 @@ def _gerar_thumbnail_seguro(item) -> Path | None:
         print(f"[publish] aviso: falhou ao gerar thumbnail de {item.item_id}: {exc}")
         return None
 
+
 def _set_thumbnail_seguro(video_id: str, thumb_path: Path) -> None:
-    """set_thumbnail pode dar 403 em canais que ainda não verificaram o
-    telefone no YouTube ("doesn't have permissions to upload and set
-    custom video thumbnails") - isso é esperado até a verificação, nunca
-    deve travar o resto da publicação."""
+    """set_thumbnail dá 403 em canal sem telefone verificado - esperado,
+    nunca trava o resto."""
     try:
         set_thumbnail(video_id, thumb_path)
     except Exception as exc:
         print(f"[publish] aviso: falhou ao definir thumbnail de {video_id}: {exc}")
 
-def _description(item, date_str: str) -> str:
+
+def _description(item) -> str:
     return (
         f"{item.titulo}\n\n"
         f"Conteúdo baseado em material oficial da Rockstar Games/Take-Two "
@@ -87,8 +100,65 @@ def _description(item, date_str: str) -> str:
         f"#GTA6 #GTAVI #RockstarGames"
     )
 
-def _process_item(item, date_str: str, review_path: Path) -> None:
-    print(f"[publish] processando {item.item_id} ({item.kind}): {item.titulo}")
+
+def _slot_do_item(batch, item, date_str: str) -> datetime:
+    if item.kind == "long":
+        hhmm = SLOT_LONGO
+    else:
+        shorts = [i.item_id for i in batch.items if i.kind == "short"]
+        idx = shorts.index(item.item_id) if item.item_id in shorts else 0
+        hhmm = SLOTS_SHORTS[min(idx, len(SLOTS_SHORTS) - 1)]
+    hora, minuto = (int(x) for x in hhmm.split(":"))
+    ano, mes, dia = (int(x) for x in date_str.split("-"))
+    return datetime(ano, mes, dia, hora, minuto, tzinfo=FUSO)
+
+
+def _decidir_horario(slot: datetime, ultimo: datetime | None) -> datetime | None:
+    """None = publica agora (público direto). datetime = sobe privado e o
+    YouTube publica sozinho nesse horário."""
+    agora = datetime.now(FUSO)
+    folga = timedelta(minutes=ANTECEDENCIA_MIN)
+    gap = timedelta(minutes=GAP_MIN)
+    alvo = slot if ultimo is None else max(slot, ultimo + gap)
+    if alvo > agora + folga:
+        return alvo
+    if ultimo is None or ultimo + gap <= agora:
+        return None
+    return max(ultimo + gap, agora + folga)
+
+
+def _git(*args: str) -> int:
+    return subprocess.run(["git", *args], check=False).returncode
+
+
+def _salvar_status_git(item_id: str) -> None:
+    """Empurra "Publicado: sim" pro repositório logo depois de cada item
+    (só dentro do GitHub Actions). O vídeo já está no YouTube nesse ponto;
+    perder essa marcação = risco de subir o mesmo vídeo de novo."""
+    if os.environ.get("GITHUB_ACTIONS") != "true":
+        return
+    try:
+        _git("config", "user.name", "gta6-pipeline-bot")
+        _git("config", "user.email", "actions@users.noreply.github.com")
+        _git("add", "review/")
+        if _git("diff", "--cached", "--quiet") == 0:
+            return
+        _git("commit", "-m", f"chore: {item_id} publicado")
+        for tentativa in range(1, 6):
+            if _git("push") == 0:
+                print(f"[publish] status de {item_id} salvo no repositorio.")
+                return
+            print(f"[publish] push rejeitado (tentativa {tentativa}/5) - rebase e tenta de novo")
+            _git("pull", "--rebase", "--autostash", "origin", "main")
+            time.sleep(5)
+        print(f"[publish] AVISO: nao consegui salvar o status de {item_id} no repositorio.")
+    except Exception as exc:
+        print(f"[publish] AVISO: erro ao salvar status de {item_id} no git: {exc}")
+
+
+def _process_item(batch, item, date_str: str, review_path: Path, ultimo: datetime | None) -> datetime:
+    """Renderiza + sobe 1 item. Retorna o horário em que ele vai ao ar."""
+    print(f"[publish] processando {item.item_id} ({item.kind}): {item.titulo}", flush=True)
 
     audio_dir = config.ASSETS_DIR / "tmp" / "audio" / item.item_id
     segments = synthesize_sentences(item.roteiro, audio_dir)
@@ -100,52 +170,75 @@ def _process_item(item, date_str: str, review_path: Path) -> None:
 
     thumb_path = _gerar_thumbnail_seguro(item)
 
-    video_id = upload_video(
+    quando = _decidir_horario(_slot_do_item(batch, item, date_str), ultimo)
+    kwargs = dict(
         video_path=video_path,
         title=item.titulo,
-        description=_description(item, date_str),
+        description=_description(item),
         tags=["GTA VI", "GTA 6", "Rockstar Games"],
         is_short=(item.kind == "short"),
     )
+    video_id = None
+    if quando is not None:
+        iso = quando.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.000Z")
+        try:
+            video_id = upload_video(publish_at_iso=iso, **kwargs)
+            print(f"[publish] {item.item_id} agendado pra {quando:%d/%m %H:%M} (Brasilia)")
+        except Exception as exc:
+            print(f"[publish] aviso: upload agendado falhou ({exc}) - tentando publicar direto.")
+            quando = None
+    if video_id is None:
+        video_id = upload_video(**kwargs)
+        quando = datetime.now(FUSO)
+        print(f"[publish] {item.item_id} publicado direto (publico agora).")
 
     if thumb_path is not None:
         _set_thumbnail_seguro(video_id, thumb_path)
 
     mark_item_published(review_path, date_str, item.item_id)
-    print(f"[publish] {item.item_id} publicado/agendado como https://youtu.be/{video_id}")
+    _salvar_status_git(item.item_id)
+    print(f"[publish] {item.item_id} -> https://youtu.be/{video_id}", flush=True)
+    return quando
 
-def main():
-    date_str = date_cls.today().isoformat()
+
+def main() -> int:
+    date_str = datetime.now(FUSO).date().isoformat()
     review_path = config.REVIEW_DIR / f"{date_str}.md"
 
     if not review_path.exists():
         print(f"[publish] {review_path} não existe — rode generate.py hoje.")
-        return
+        return 0
 
     batch = load_batch(review_path, date_str)
     if batch.status != "APROVADO":
-        print(f"[publish] lote de {date_str} ainda não foi aprovado (rode approve.py {date_str}).")
-        return
+        print(f"[publish] lote de {date_str} não está aprovado (trava de qualidade) - nada a publicar.")
+        return 0
 
-    process_all = "--all" in sys.argv
-    processed_any = False
-    primeiro = True
-    while True:
-        item = next_unpublished(load_batch(review_path, date_str))
-        if not item:
-            break
-        if not primeiro:
-            espera_min = random.randint(*_ESPERA_ENTRE_ITENS_MIN)
-            print(f"[publish] aguardando ~{espera_min}min antes do próximo item (evita rajada de uploads).")
-            time.sleep(espera_min * 60)
-        _process_item(item, date_str, review_path)
-        processed_any = True
-        primeiro = False
-        if not process_all:
-            break
-
-    if not processed_any:
+    pendentes = [i for i in batch.items if not i.publicado]
+    if not pendentes:
         print(f"[publish] nada pendente em {date_str} — todo o lote já foi publicado.")
+        return 0
+    if "--all" not in sys.argv:
+        pendentes = pendentes[:1]
+
+    ultimo = None
+    falhas = []
+    for n, item in enumerate(pendentes):
+        if n > 0:
+            time.sleep(random.randint(20, 60))
+        try:
+            ultimo = _process_item(batch, item, date_str, review_path, ultimo)
+        except Exception:
+            print(f"[publish] ERRO em {item.item_id} - pulando pro próximo item:")
+            traceback.print_exc()
+            falhas.append(item.item_id)
+
+    if falhas:
+        print(f"[publish] terminou com falha em: {', '.join(falhas)} (a próxima execução tenta de novo).")
+        return 1
+    print(f"[publish] {len(pendentes)} item(ns) processado(s) sem erro.")
+    return 0
+
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
