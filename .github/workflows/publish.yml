@@ -9,14 +9,14 @@ on:
     # se ainda nao existir + sobe tudo com horario agendado no proprio
     # YouTube - ver publish.py). Os outros disparos do dia so conferem que
     # nao ha nada pendente e terminam em segundos.
-    - cron: "23 9 * * *"    # 06:23 America/Sao_Paulo
-    - cron: "47 10 * * *"   # 07:47
-    - cron: "23 12 * * *"   # 09:23
-    - cron: "47 13 * * *"   # 10:47
-    - cron: "23 15 * * *"   # 12:23
-    - cron: "47 17 * * *"   # 14:47
-    - cron: "23 20 * * *"   # 17:23
-    - cron: "47 22 * * *"   # 19:47
+    - cron: "23 9 * * *"
+    - cron: "47 10 * * *"
+    - cron: "23 12 * * *"
+    - cron: "47 13 * * *"
+    - cron: "23 15 * * *"
+    - cron: "47 17 * * *"
+    - cron: "23 20 * * *"
+    - cron: "47 22 * * *"
   workflow_dispatch: {}
 
 permissions:
@@ -96,6 +96,33 @@ jobs:
       - name: Baixar screenshots oficiais de GTA VI (broll real)
         if: steps.checar.outputs.pendente == 'true'
         run: python assets/broll_oficial/baixar_broll.py
+
+      - name: Restaurar clipes oficiais em cache
+        if: steps.checar.outputs.pendente == 'true'
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            assets/clipes_oficiais/*.mp4
+            assets/clipes_oficiais/_tentados.txt
+          key: clipes-oficiais-v1-${{ github.run_id }}
+          restore-keys: |
+            clipes-oficiais-v1-
+
+      - name: Preparar clipes oficiais de video (site de midia da Rockstar)
+        id: clipes
+        if: steps.checar.outputs.pendente == 'true'
+        env:
+          CLIPES_ORCAMENTO_SEG: "600"
+        run: python assets/clipes_oficiais/baixar_clipes.py
+
+      - name: Guardar clipes em cache
+        if: steps.checar.outputs.pendente == 'true' && steps.clipes.outputs.novos == 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            assets/clipes_oficiais/*.mp4
+            assets/clipes_oficiais/_tentados.txt
+          key: clipes-oficiais-v1-${{ github.run_id }}
 
       - name: Restaurar credenciais do YouTube
         if: steps.checar.outputs.pendente == 'true'
