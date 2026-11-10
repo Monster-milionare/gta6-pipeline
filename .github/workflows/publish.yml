@@ -2,84 +2,128 @@ name: Publicar proximo item aprovado
 
 on:
   schedule:
-    # espacado ao longo do dia (UTC) - cada disparo roda publish.py --all,
-    # que processa TUDO que ainda falta publicar no dia (nao so 1 item) -
-    # isso existe pra sobreviver ao cron do GitHub Actions nao ser
-    # confiavel (execucoes atrasadas ou nem disparando nesse dia). Varios
-    # horarios aqui so dao mais chances de pelo menos 1 disparar no dia.
-    - cron: "0 12 * * *"  # 09:00 America/Sao_Paulo
-    - cron: "0 14 * * *"  # 11:00
-    - cron: "0 16 * * *"  # 13:00
-    - cron: "0 18 * * *"  # 15:00
-    - cron: "0 20 * * *"  # 17:00
-    - cron: "0 22 * * *"  # 19:00
+    # O cron do GitHub Actions atrasa horas (ou nem dispara) quando marcado
+    # em minuto cheio (:00), que e o horario de pico deles. Por isso aqui e
+    # sempre minuto "quebrado" (:23/:47) e varios horarios ao longo do dia:
+    # QUALQUER um que disparar resolve o dia inteiro sozinho (gera o lote
+    # se ainda nao existir + sobe tudo com horario agendado no proprio
+    # YouTube - ver publish.py). Os outros disparos do dia so conferem que
+    # nao ha nada pendente e terminam em segundos.
+    - cron: "23 9 * * *"    # 06:23 America/Sao_Paulo
+    - cron: "47 10 * * *"   # 07:47
+    - cron: "23 12 * * *"   # 09:23
+    - cron: "47 13 * * *"   # 10:47
+    - cron: "23 15 * * *"   # 12:23
+    - cron: "47 17 * * *"   # 14:47
+    - cron: "23 20 * * *"   # 17:23
+    - cron: "47 22 * * *"   # 19:47
   workflow_dispatch: {}
 
 permissions:
   contents: write
 
+# Nunca duas publicacoes ao mesmo tempo (duas execucoes juntas subiriam o
+# mesmo video duas vezes). Uma segunda execucao espera a primeira acabar.
+concurrency:
+  group: gta6-pipeline-publicacao
+  cancel-in-progress: false
+
+# "Hoje" e sempre o dia em Brasilia (vale pro "date" do shell e pro Python).
+env:
+  TZ: America/Sao_Paulo
+
 jobs:
   publish:
     runs-on: ubuntu-latest
-    timeout-minutes: 300
+    timeout-minutes: 240
     steps:
       - uses: actions/checkout@v4
 
+      - name: Checar se ha algo pendente hoje (evita gastar minutos a toa)
+        id: checar
+        run: |
+          HOJE=$(date +%F)
+          ARQ="review/$HOJE.md"
+          if [ ! -f "$ARQ" ]; then
+            echo "[checar] lote de $HOJE ainda nao existe - vai gerar e publicar."
+            echo "pendente=true" >> "$GITHUB_OUTPUT"
+          elif grep -q "^Status: APROVADO" "$ARQ" && grep -q "^Publicado: nao" "$ARQ"; then
+            echo "[checar] ha itens pendentes em $ARQ."
+            echo "pendente=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "[checar] nada pendente em $HOJE - encerrando."
+            echo "pendente=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - uses: actions/setup-python@v5
+        if: steps.checar.outputs.pendente == 'true'
         with:
           python-version: "3.11"
 
-      - run: pip install -r requirements.txt
+      - name: Instalar dependencias Python
+        if: steps.checar.outputs.pendente == 'true'
+        run: pip install -r requirements.txt
 
-      - name: Instalar ffmpeg
-        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+      - name: Garantir lote de hoje (gera aqui se o cron de geracao nao rodou)
+        if: steps.checar.outputs.pendente == 'true'
+        env:
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+        run: |
+          HOJE=$(date +%F)
+          if [ ! -f "review/$HOJE.md" ]; then
+            python generate.py
+            git config user.name "gta6-pipeline-bot"
+            git config user.email "actions@users.noreply.github.com"
+            git add review/
+            git diff --cached --quiet || git commit -m "chore: lote gerado $HOJE"
+            for i in 1 2 3 4 5; do
+              if git push; then break; fi
+              git pull --rebase --autostash origin main
+              sleep 5
+            done
+          fi
 
-      - name: Confirmar ffmpeg disponivel
-        run: ffmpeg -version
+      - name: Instalar ffmpeg e fontes
+        if: steps.checar.outputs.pendente == 'true'
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg fonts-dejavu-core
 
       - name: Gerar mascote e trilha sonora (assets sintetizados em runtime)
+        if: steps.checar.outputs.pendente == 'true'
         run: |
           python assets/mascote/gerar_mascote.py
           python assets/musica/gerar_musica.py
 
       - name: Baixar screenshots oficiais de GTA VI (broll real)
+        if: steps.checar.outputs.pendente == 'true'
         run: python assets/broll_oficial/baixar_broll.py
 
-      - name: Aguardar jitter aleatorio (so em execucoes agendadas)
-        if: github.event_name == 'schedule'
-        run: sleep $((RANDOM % 1200))
-
       - name: Restaurar credenciais do YouTube
+        if: steps.checar.outputs.pendente == 'true'
         run: |
           echo '${{ secrets.YOUTUBE_CLIENT_SECRET_JSON }}' > client_secret.json
           echo '${{ secrets.YOUTUBE_TOKEN_JSON }}' > token.json
 
-      - name: Publicar tudo que falta hoje (catch-up, ver publish.py)
+      - name: Publicar tudo que falta hoje (ver publish.py)
+        if: steps.checar.outputs.pendente == 'true'
         env:
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
         run: python publish.py --all
 
-      - name: Salvar status de publicado no repositorio
+      - name: Salvar status de publicado no repositorio (rede de seguranca)
+        if: always() && steps.checar.outputs.pendente == 'true'
         run: |
+          # publish.py ja salva o status apos CADA item; isto aqui so cobre
+          # o caso de algum push de la ter falhado.
           git config user.name "gta6-pipeline-bot"
           git config user.email "actions@users.noreply.github.com"
           git add review/
-          git diff --cached --quiet || git commit -m "chore: item publicado $(date +%F_%H:%M)"
-          # O video ja foi publicado no YouTube nesse ponto - o que falta
-          # e so salvar "Publicado: sim" no repo. Se outro push (manual ou
-          # de outra execucao concorrente) mudou o main nesse meio tempo,
-          # um "git push" direto falha com rejected/non-fast-forward e
-          # essa marcacao se perde, arriscando publicar o MESMO item de
-          # novo no proximo ciclo. Por isso, se falhar, rebase em cima do
-          # que tem de novo no remoto e tenta de novo (poucas vezes,
-          # sempre com um commit so nosso, entao o rebase e seguro).
+          git diff --cached --quiet || git commit -m "chore: status de publicacao $(date +%F_%H:%M)"
           for i in 1 2 3 4 5; do
             if git push; then
               echo "[publish] status salvo no repositorio."
               break
             fi
             echo "[publish] push rejeitado (tentativa $i/5) - rebase e tenta de novo"
-            git fetch origin main
-            git rebase origin/main
+            git pull --rebase --autostash origin main
             sleep 5
           done
