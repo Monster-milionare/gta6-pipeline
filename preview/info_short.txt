@@ -1,0 +1,4 @@
+item: short-2026-11-10-01 - Trailer 1: O que o primeiro vídeo revelou?
+duracao: 25.6s | frases: 6 | frases com tempo por palavra: 6
+clipes oficiais disponiveis: 66
+exemplo de palavras: [('Você', 0.092375, 0.367791), ('se', 0.378375, 0.484291), ('lembra', 0.494916, 0.738541), ('do', 0.749166, 0.823332), ('primeiro', 0.833916, 1.162291), ('vislumbre', 1.172875, 1.5965829999999999)]

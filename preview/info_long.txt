@@ -1,0 +1,4 @@
+item: long-2026-11-10 - GTA VI: Tudo que sabemos antes do lançamento
+duracao: 39.2s | frases: 10 | frases com tempo por palavra: 10
+clipes oficiais disponiveis: 66
+exemplo de palavras: [('Um', 0.096708, 0.283624), ('roubo', 0.295333, 0.610749), ('que', 0.622416, 0.727541), ('parecia', 0.73925, 1.194875), ('fácil', 1.206541, 1.556999), ('está', 1.568708, 1.767291)]
