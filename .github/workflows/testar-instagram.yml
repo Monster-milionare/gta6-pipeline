@@ -1,0 +1,21 @@
+name: Testar Instagram (nao posta nada)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  testar:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Conferir conta e permissao de publicar
+        env:
+          IG_ACCESS_TOKEN: ${{ secrets.IG_ACCESS_TOKEN }}
+          IG_USER_ID: ${{ secrets.IG_USER_ID }}
+        run: |
+          echo "tamanho do IG_USER_ID: ${#IG_USER_ID}  | tamanho do token: ${#IG_ACCESS_TOKEN}"
+          echo "--- conta ---"
+          curl -s "https://graph.facebook.com/v21.0/$IG_USER_ID?fields=username,name&access_token=$IG_ACCESS_TOKEN"
+          echo
+          echo "--- limite de publicacao ---"
+          curl -s "https://graph.facebook.com/v21.0/$IG_USER_ID/content_publishing_limit?fields=quota_usage,config&access_token=$IG_ACCESS_TOKEN"
+          echo
