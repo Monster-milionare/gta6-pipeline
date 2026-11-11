@@ -11,16 +11,26 @@ on:
     # nao ha nada pendente e terminam em segundos.
     - cron: "23 9 * * *"
     - cron: "47 10 * * *"
+    - cron: "11 11 * * *"
     - cron: "23 12 * * *"
     - cron: "47 13 * * *"
+    - cron: "29 14 * * *"
     - cron: "23 15 * * *"
+    - cron: "53 16 * * *"
     - cron: "47 17 * * *"
-    - cron: "23 20 * * *"
+    - cron: "41 19 * * *"
+    - cron: "23 21 * * *"
     - cron: "47 22 * * *"
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      tentativa:
+        description: "uso interno: numero da re-execucao automatica"
+        required: false
+        default: "0"
 
 permissions:
   contents: write
+  actions: write
 
 # Nunca duas publicacoes ao mesmo tempo (duas execucoes juntas subiriam o
 # mesmo video duas vezes). Uma segunda execucao espera a primeira acabar.
@@ -71,7 +81,16 @@ jobs:
         run: |
           HOJE=$(date +%F)
           if [ ! -f "review/$HOJE.md" ]; then
-            python generate.py
+            # a API gratis de roteiro as vezes falha: tenta ate 4 vezes
+            for t in 1 2 3 4; do
+              python generate.py && break
+              echo "[generate] tentativa $t falhou - aguardando antes de tentar de novo"
+              sleep $((t * 40))
+            done
+            if [ ! -f "review/$HOJE.md" ]; then
+              echo "::error::nao foi possivel gerar o lote de hoje"
+              exit 1
+            fi
             git config user.name "gta6-pipeline-bot"
             git config user.email "actions@users.noreply.github.com"
             git add review/
@@ -131,10 +150,18 @@ jobs:
           echo '${{ secrets.YOUTUBE_TOKEN_JSON }}' > token.json
 
       - name: Publicar tudo que falta hoje (ver publish.py)
+        id: pub
         if: steps.checar.outputs.pendente == 'true'
+        continue-on-error: true
+        timeout-minutes: 180
         env:
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
-        run: python publish.py --all
+        run: |
+          set +e
+          python publish.py --all
+          code=$?
+          echo "codigo=$code" >> "$GITHUB_OUTPUT"
+          exit $code
 
       - name: Salvar status de publicado no repositorio (rede de seguranca)
         if: always() && steps.checar.outputs.pendente == 'true'
@@ -154,3 +181,19 @@ jobs:
             git pull --rebase --autostash origin main
             sleep 5
           done
+
+      - name: Sobrou item? Se sim, dispara nova execucao sozinha
+        if: always() && steps.pub.outputs.codigo == '1' && fromJSON(github.event.inputs.tentativa || '0') < 5
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TENTATIVA: ${{ github.event.inputs.tentativa || '0' }}
+        run: |
+          # codigo 1 = algum item falhou (render, voz, upload...). Em vez de
+          # esperar o proximo horario do cron (que o GitHub atrasa), pede uma
+          # nova execucao agora; ela entra na fila e roda quando esta acabar.
+          sleep 120
+          gh workflow run publish.yml -f tentativa=$((TENTATIVA + 1))
+
+      - name: Deixar a execucao vermelha se algo falhou (aparece na aba Actions)
+        if: always() && steps.pub.outputs.codigo != '' && steps.pub.outputs.codigo != '0'
+        run: exit 1
