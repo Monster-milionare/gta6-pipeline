@@ -1,0 +1,101 @@
+name: Reels do Instagram (independente do YouTube)
+
+on:
+  schedule:
+    # Minutos "quebrados" (o cron do GitHub atrasa muito em :00). Duas
+    # execucoes por dia; se uma atrasar ou falhar, a outra cobre (o alvo
+    # da segunda e o dia inteiro e o que ja foi postado nunca repete).
+    - cron: "19 14 * * *"   # ~11:19 Brasilia  (alvo: 3 extras)
+    - cron: "41 22 * * *"   # ~19:41 Brasilia  (alvo: todos os extras)
+  workflow_dispatch:
+    inputs:
+      extras:
+        description: "extras do dia (padrao 5)"
+        required: false
+        default: "5"
+      lote:
+        description: "tambem postar os shorts do lote do dia (true/false)"
+        required: false
+        default: "false"
+
+permissions:
+  contents: write
+
+# Grupo proprio: nunca disputa fila com a publicacao do YouTube.
+concurrency:
+  group: gta6-reels
+  cancel-in-progress: false
+
+env:
+  TZ: America/Sao_Paulo
+
+jobs:
+  reels:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Instalar dependencias Python
+        run: pip install -r requirements.txt
+
+      - name: Instalar ffmpeg e fontes
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg fonts-dejavu-core
+
+      - name: Gerar mascote e trilha sonora
+        run: |
+          python assets/mascote/gerar_mascote.py
+          python assets/musica/gerar_musica.py
+          python assets/broll_oficial/baixar_broll.py
+
+      - name: Restaurar clipes oficiais em cache
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            assets/clipes_oficiais/*.mp4
+            assets/clipes_oficiais/_tentados.txt
+          key: clipes-oficiais-v1-${{ github.run_id }}
+          restore-keys: |
+            clipes-oficiais-v1-
+
+      - name: Preparar clipes oficiais de video
+        id: clipes
+        continue-on-error: true
+        env:
+          CLIPES_ORCAMENTO_SEG: "240"
+        run: python assets/clipes_oficiais/baixar_clipes.py
+
+      - name: Guardar clipes em cache
+        if: steps.clipes.outputs.novos == 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            assets/clipes_oficiais/*.mp4
+            assets/clipes_oficiais/_tentados.txt
+          key: clipes-oficiais-v1-${{ github.run_id }}
+
+      - name: Gerar e postar os Reels
+        env:
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          IG_ACCESS_TOKEN: ${{ secrets.IG_ACCESS_TOKEN }}
+          IG_USER_ID: ${{ secrets.IG_USER_ID }}
+          EXTRAS_IN: ${{ github.event.inputs.extras }}
+          LOTE_IN: ${{ github.event.inputs.lote }}
+        run: |
+          EXTRAS="${EXTRAS_IN:-5}"
+          if [ -n "$EXTRAS_IN" ]; then
+            ALVO="$EXTRAS"
+            LOTE="$LOTE_IN"
+          else
+            # execucao agendada: manha = 3 extras, tarde/noite = todos; sempre confere o lote
+            if [ "$(date +%H)" -lt 15 ]; then ALVO=3; else ALVO="$EXTRAS"; fi
+            LOTE="true"
+          fi
+          ARGS="--extras $EXTRAS --alvo $ALVO"
+          if [ "$LOTE" = "true" ]; then ARGS="$ARGS --lote"; fi
+          echo "[workflow] python reels.py $ARGS"
+          python reels.py $ARGS
