@@ -62,7 +62,7 @@ _thumb_bloqueada = False   # canal sem verificacao por telefone: 403 em toda thu
 # Horários-alvo de publicação (Brasília). Longo perto do almoço, shorts
 # espalhados do almoço até a noite (picos de uso de celular no Brasil).
 SLOT_LONGO = "11:40"
-SLOTS_SHORTS = ["12:20", "14:10", "16:40", "18:30", "20:40"]
+SLOTS_SHORTS = ["08:50", "10:20", "12:20", "14:10", "16:00", "17:40", "19:20", "20:50"]
 # Distância mínima entre dois vídeos indo ao ar (quando os horários-alvo
 # já passaram e a execução está "correndo atrás").
 GAP_MIN = 25
@@ -72,6 +72,8 @@ ANTECEDENCIA_MIN = 12
 # Pedido de like/inscrição: fixo e programático (não depende do LLM lembrar
 # de pedir isso no roteiro) - roda no fim de todo vídeo. render.py detecta
 # Segment.is_cta=True e anima o botão de like/inscrição nesse trecho.
+CTA_TEORIA = ("Comenta 1 ou 2 aqui embaixo e se inscreve: a teoria mais votada "
+              "vira video exclusivo no canal.")
 CTA_FRASES = [
     "Curte o vídeo e se inscreve no canal pra não perder nenhuma notícia de GTA VI.",
     "Se esse vídeo te ajudou, deixa o like e se inscreve aqui no canal.",
@@ -81,6 +83,8 @@ CTA_FRASES = [
 
 
 def _cta_frase(item) -> str:
+    if item.item_id.startswith("teoria-"):
+        return CTA_TEORIA
     idx = sum(ord(c) for c in item.item_id) % len(CTA_FRASES)
     return CTA_FRASES[idx]
 
@@ -211,6 +215,11 @@ def _process_item(batch, item, date_str: str, review_path: Path, ultimo: datetim
     segments = segments + cta_segments
 
     video_path = config.ASSETS_DIR / "tmp" / f"{item.item_id}.mp4"
+    # Corte mais rapido nos shorts (mais cortes por segundo = mais retencao).
+    if item.kind == "short":
+        _render_mod.CORTE_MAX, _render_mod.PLANO_MAX = 1.8, 2.3
+    else:
+        _render_mod.CORTE_MAX, _render_mod.PLANO_MAX = 2.6, 3.3
     render_video(item.kind, item.titulo, segments, video_path)
 
     thumb_path = _gerar_thumbnail_seguro(item)
