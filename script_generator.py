@@ -6,7 +6,7 @@ proibido de inventar fatos novos sobre o jogo (evita alucinar "leak"
 falso).
 """
 import json
-import random
+import time
 from datetime import date as date_cls
 
 from openai import OpenAI
@@ -49,33 +49,6 @@ Regras rígidas:
     primeiros segundos decidem se quem está assistindo continua ou sai.
 """
 
-USER_PROMPT_TEMPLATE = """\
-<fatos_confirmados>
-{fatos}
-</fatos_confirmados>
-
-<temas_ja_publicados>
-{historico}
-</temas_ja_publicados>
-REGRA ABSOLUTA: nenhum titulo ou assunto novo pode repetir ou parafrasear algo da
-lista acima nem de outro roteiro deste mesmo lote. Cada um precisa de um tema
-DIFERENTE (personagem, mapa, trailer, plataforma, pre-carga, preco, historia
-da franquia, comparacao, bastidores, etc.).
-
-Gere o lote de hoje ({data}) com:
-- 1 roteiro de vídeo longo
-- {n_shorts} roteiros de shorts, cada um com ângulo diferente
-
-Formato de resposta (JSON estrito, sem ```):
-{{
-  "long": {{"titulo": "...", "roteiro": "..."}},
-  "shorts": [
-    {{"titulo": "...", "roteiro": "..."}}
-  ]
-}}
-"""
-
-
 def _load_knowledge_base() -> str:
     if not config.KNOWLEDGE_BASE_FILE.exists():
         raise FileNotFoundError(
@@ -85,34 +58,70 @@ def _load_knowledge_base() -> str:
     return config.KNOWLEDGE_BASE_FILE.read_text(encoding="utf-8")
 
 
+# Modelos de reserva: se o principal falhar em gerar JSON valido (erro 400
+# "Failed to generate JSON", que ja derrubou a geracao do lote), tenta o proximo.
+MODELOS = [config.GROQ_MODEL, "llama-3.3-70b-versatile", "openai/gpt-oss-20b"]
+
+# Um formato/angulo diferente por vaga do dia (rotaciona com a data), pra o
+# lote nascer variado em vez de depender so do modelo "lembrar" de variar.
+ANGULOS = [
+    "pergunta provocativa que o torcedor de GTA faria",
+    "comparacao entre dois trailers ou dois jogos da franquia",
+    "contagem regressiva para o lancamento (19/11/2026) e o que fazer ate la",
+    "curiosidade sobre um personagem confirmado",
+    "um lugar/cenario do mapa mostrado nos trailers",
+    "plataformas, pre-carga e preparacao tecnica",
+    "historia da franquia GTA e como chegou ate aqui",
+    "reacao a um detalhe especifico de um trailer",
+    "numeros e recordes do marketing (so os confirmados)",
+    "perguntas e respostas rapidas sobre o que ja foi confirmado",
+    "o que a Rockstar ja disse oficialmente e o que ainda nao disse",
+    "tour pelas cenas do trailer, uma a uma",
+]
+
+
 def _extract_json(raw_text: str) -> dict:
     text = raw_text.strip()
-    if text.startswith("```"):
-        text = text.strip("`")
-        text = text[text.find("{"):]
-    return json.loads(text)
+    ini, fim = text.find("{"), text.rfind("}")
+    if ini == -1 or fim == -1:
+        raise ValueError("resposta sem JSON")
+    return json.loads(text[ini:fim + 1], strict=False)
 
 
 def _chat(client, prompt: str, temperatura: float = 0.9) -> dict:
-    response = client.chat.completions.create(
-        model=config.GROQ_MODEL,
-        messages=[
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": prompt},
-        ],
-        response_format={"type": "json_object"},
-        temperature=temperatura,
-    )
-    return _extract_json(response.choices[0].message.content)
+    """Chama o modelo ate conseguir um JSON valido: alterna com/sem modo JSON
+    estrito, baixa a temperatura e troca de modelo a cada falha."""
+    ultimo = None
+    for tentativa in range(6):
+        modelo = MODELOS[min(tentativa // 2, len(MODELOS) - 1)]
+        kwargs = dict(
+            model=modelo,
+            messages=[
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "user", "content": prompt},
+            ],
+            temperature=max(0.5, temperatura - 0.1 * tentativa),
+            max_tokens=7000,
+        )
+        if tentativa % 2 == 0:
+            kwargs["response_format"] = {"type": "json_object"}
+        try:
+            resp = client.chat.completions.create(**kwargs)
+            return _extract_json(resp.choices[0].message.content)
+        except Exception as exc:
+            ultimo = exc
+            print(f"[generate] chamada ao modelo {modelo} falhou ({str(exc)[:160]}) - tentativa {tentativa + 1}/6", flush=True)
+            time.sleep(4 + 4 * tentativa)
+    raise ultimo
 
 
 def _problema_individual(kind: str, titulo: str, roteiro: str):
     """Motivo pelo qual o item nao pode ir ao ar (None = ok)."""
     n = len(roteiro.split())
     if kind == "long" and not (MIN_LONG_WORDS <= n <= MAX_LONG_WORDS):
-        return f"roteiro longo com {n} palavras"
+        return f"roteiro longo com {n} palavras (precisa de {MIN_LONG_WORDS}-{MAX_LONG_WORDS})"
     if kind == "short" and not (MIN_SHORT_WORDS <= n <= MAX_SHORT_WORDS):
-        return f"short com {n} palavras"
+        return f"short com {n} palavras (precisa de {MIN_SHORT_WORDS}-{MAX_SHORT_WORDS})"
     if not titulo.strip():
         return "titulo vazio"
     baixo = roteiro.lower()
@@ -130,19 +139,22 @@ def _validar(kind: str, titulo: str, roteiro: str, historico: list, aceitos: lis
     return unicidade.achar_repeticao(titulo, roteiro, historico + aceitos)
 
 
-def _regenerar_um(client, kind: str, fatos: str, proibidos: list, motivo: str):
-    """Pede UM roteiro novo, com tema diferente de tudo que ja existe."""
+def _gerar_um(client, kind: str, fatos: str, proibidos: list, angulo: str, motivo: str | None):
+    """Pede UM roteiro (cada item em sua propria chamada: respostas curtas
+    quase nunca quebram o JSON, e cada uma ja nasce sabendo o que e proibido)."""
     alvo = ("1 roteiro de video longo (1300-1900 palavras)" if kind == "long"
             else "1 roteiro de short (80-150 palavras)")
-    lista = "\n".join(f"- {t}" for t in proibidos[-80:]) or "(nenhum)"
+    lista = "\n".join(f"- {t}" for t in proibidos[-80:]) or "(nenhum ainda)"
+    aviso = f"\nA tentativa anterior foi recusada: {motivo}. Corrija isso.\n" if motivo else ""
     prompt = (
         f"<fatos_confirmados>\n{fatos}\n</fatos_confirmados>\n\n"
-        f"<temas_ja_usados>\n{lista}\n</temas_ja_usados>\n\n"
-        f"O roteiro anterior foi recusado: {motivo}. Gere {alvo} sobre um assunto "
-        f"COMPLETAMENTE DIFERENTE de todos os temas ja usados acima. Formato "
-        f'(JSON estrito): {{"titulo": "...", "roteiro": "..."}}'
+        f"<temas_ja_usados>\n{lista}\n</temas_ja_usados>\n"
+        f"REGRA ABSOLUTA: o assunto/titulo novo nao pode repetir nem parafrasear nada "
+        f"da lista acima.\n{aviso}\n"
+        f"Gere {alvo}. Formato/angulo sugerido: {angulo}. Responda so com JSON: "
+        f'{{"titulo": "...", "roteiro": "..."}}'
     )
-    data = _chat(client, prompt, temperatura=1.0)
+    data = _chat(client, prompt)
     return str(data["titulo"]).strip(), str(data["roteiro"]).strip()
 
 
@@ -161,37 +173,36 @@ def generate_daily_content(date_str: str | None = None) -> DailyBatch:
     # Todo o historico (qualquer dia): nada que ja foi feito pode voltar.
     historico = unicidade.carregar_historico(excluir_data=date_str)
     titulos_hist = [t for _i, t, _r in historico]
-    lista_hist = "\n".join(f"- {t}" for t in titulos_hist[-80:]) or "(nenhum ainda)"
 
-    prompt = USER_PROMPT_TEMPLATE.format(
-        fatos=fatos, data=date_str, n_shorts=config.SHORTS_PER_DAY, historico=lista_hist)
-    data = _chat(client, prompt)
-
-    candidatos = [("long", f"long-{date_str}", data["long"]["titulo"], data["long"]["roteiro"])]
-    for i, short in enumerate(data["shorts"], start=1):
-        candidatos.append(("short", f"short-{date_str}-{i:02d}", short["titulo"], short["roteiro"]))
+    vagas = [("long", f"long-{date_str}")] + [
+        ("short", f"short-{date_str}-{i:02d}") for i in range(1, config.SHORTS_PER_DAY + 1)]
+    deslocamento = date_cls.fromisoformat(date_str).toordinal()
 
     itens, aceitos, descartados = [], [], []
-    for kind, item_id, titulo, roteiro in candidatos:
-        titulo, roteiro = str(titulo).strip(), str(roteiro).strip()
-        motivo = _validar(kind, titulo, roteiro, historico, aceitos)
-        tentativa = 0
-        while motivo and tentativa < 4:
-            tentativa += 1
-            print(f"[generate] {item_id} recusado ({motivo}) - regenerando ({tentativa}/4).", flush=True)
-            proibidos = titulos_hist + [a[1] for a in aceitos] + [titulo]
+    for n, (kind, item_id) in enumerate(vagas):
+        angulo = ANGULOS[(deslocamento + n * 5) % len(ANGULOS)]
+        motivo, recusados, ok = None, [], False
+        for tentativa in range(1, 6):
+            proibidos = titulos_hist + [a[1] for a in aceitos] + recusados
             try:
-                titulo, roteiro = _regenerar_um(client, kind, fatos, proibidos, motivo)
+                titulo, roteiro = _gerar_um(client, kind, fatos, proibidos, angulo, motivo)
             except Exception as exc:
-                print(f"[generate] falha ao regenerar {item_id}: {exc!r}", flush=True)
+                print(f"[generate] {item_id}: falha ao gerar ({str(exc)[:160]}) - tentativa {tentativa}/5", flush=True)
+                motivo = f"erro de geracao: {str(exc)[:80]}"
                 continue
-            motivo = _validar(kind, titulo, roteiro, historico, aceitos)
-        if motivo:
+            recusa = _validar(kind, titulo, roteiro, historico, aceitos)
+            if not recusa:
+                aceitos.append((item_id, titulo, roteiro))
+                itens.append(ContentItem(item_id=item_id, kind=kind, titulo=titulo, roteiro=roteiro))
+                print(f"[generate] {item_id} ok: {titulo}", flush=True)
+                ok = True
+                break
+            print(f"[generate] {item_id} recusado ({recusa}) - tentativa {tentativa}/5", flush=True)
+            recusados.append(titulo)
+            motivo = recusa
+        if not ok:
             print(f"[generate] {item_id} DESCARTADO: {motivo}", flush=True)
             descartados.append(f"{item_id}: {motivo}")
-            continue
-        aceitos.append((item_id, titulo, roteiro))
-        itens.append(ContentItem(item_id=item_id, kind=kind, titulo=titulo, roteiro=roteiro))
 
     if not itens:
         raise RuntimeError("Nenhum roteiro valido e inedito foi gerado: " + "; ".join(descartados))
