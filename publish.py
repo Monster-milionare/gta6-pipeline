@@ -38,6 +38,8 @@ from pathlib import Path
 from zoneinfo import ZoneInfo
 
 import config
+import render as _render_mod
+import unicidade
 from content_batch import load_batch, mark_item_published
 from gerar_thumbnail import gerar_thumbnail
 from render import render_video
@@ -45,6 +47,17 @@ from tts import synthesize_sentences
 from upload import set_thumbnail, upload_video
 
 FUSO = ZoneInfo("America/Sao_Paulo")
+
+# O video longo sai em 1280x720 (YouTube exibe em HD normal): o render quadro
+# a quadro em 1920x1080 era ~2,5x mais lento e queimava os minutos gratis do
+# GitHub Actions. O short continua 1080x1920.
+_render_mod.RESOLUTIONS["long"] = (1280, 720)
+
+
+class CotaEsgotada(Exception):
+    """Cota diaria da API do YouTube acabou - nao adianta tentar de novo hoje."""
+
+_thumb_bloqueada = False   # canal sem verificacao por telefone: 403 em toda thumbnail
 
 # Horários-alvo de publicação (Brasília). Longo perto do almoço, shorts
 # espalhados do almoço até a noite (picos de uso de celular no Brasil).
@@ -86,9 +99,14 @@ def _gerar_thumbnail_seguro(item) -> Path | None:
 def _set_thumbnail_seguro(video_id: str, thumb_path: Path) -> None:
     """set_thumbnail dá 403 em canal sem telefone verificado - esperado,
     nunca trava o resto."""
+    global _thumb_bloqueada
+    if _thumb_bloqueada:
+        return
     try:
         set_thumbnail(video_id, thumb_path)
     except Exception as exc:
+        if "403" in str(exc) or "forbidden" in str(exc).lower():
+            _thumb_bloqueada = True   # nao gasta cota tentando de novo
         print(f"[publish] aviso: falhou ao definir thumbnail de {video_id}: {exc}")
 
 
@@ -99,6 +117,33 @@ def _description(item) -> str:
         f"Interactive sobre GTA VI. Lançamento: 19/11/2026.\n"
         f"#GTA6 #GTAVI #RockstarGames"
     )
+
+
+def _upload_com_retry(**kwargs) -> str:
+    """Sobe o video tentando de novo em erro passageiro (rede, 5xx do Google).
+    Cota esgotada levanta CotaEsgotada (sem insistir); outros erros sobem."""
+    ultimo = None
+    for tentativa in range(1, 5):
+        try:
+            return upload_video(**kwargs)
+        except Exception as exc:
+            msg = str(exc)
+            if "quotaExceeded" in msg or "uploadLimitExceeded" in msg or "dailyLimitExceeded" in msg:
+                raise CotaEsgotada(msg) from exc
+            if "invalid_grant" in msg or "RefreshError" in type(exc).__name__:
+                raise RuntimeError(
+                    "TOKEN DO YOUTUBE INVALIDO/EXPIRADO (invalid_grant): gere de novo o "
+                    "token.json e atualize o secret YOUTUBE_TOKEN_JSON.") from exc
+            status = getattr(getattr(exc, "resp", None), "status", None)
+            passageiro = status in (500, 502, 503, 504) or isinstance(
+                exc, (ConnectionError, TimeoutError, OSError)) or "timed out" in msg.lower()
+            ultimo = exc
+            if not passageiro or tentativa == 4:
+                break
+            espera = 20 * tentativa
+            print(f"[publish] upload falhou ({exc!r}) - tentativa {tentativa}/4, aguardando {espera}s")
+            time.sleep(espera)
+    raise ultimo
 
 
 def _slot_do_item(batch, item, date_str: str) -> datetime:
@@ -182,13 +227,15 @@ def _process_item(batch, item, date_str: str, review_path: Path, ultimo: datetim
     if quando is not None:
         iso = quando.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.000Z")
         try:
-            video_id = upload_video(publish_at_iso=iso, **kwargs)
+            video_id = _upload_com_retry(publish_at_iso=iso, **kwargs)
             print(f"[publish] {item.item_id} agendado pra {quando:%d/%m %H:%M} (Brasilia)")
+        except CotaEsgotada:
+            raise
         except Exception as exc:
             print(f"[publish] aviso: upload agendado falhou ({exc}) - tentando publicar direto.")
             quando = None
     if video_id is None:
-        video_id = upload_video(**kwargs)
+        video_id = _upload_com_retry(**kwargs)
         quando = datetime.now(FUSO)
         print(f"[publish] {item.item_id} publicado direto (publico agora).")
 
@@ -225,9 +272,26 @@ def main() -> int:
     falhas = []
     for n, item in enumerate(pendentes):
         if n > 0:
-            time.sleep(random.randint(20, 60))
+            time.sleep(random.randint(5, 15))
+        # Ultima trava anti-repeticao: nunca sobe tema igual a algo ja publicado
+        # (de hoje ou de qualquer dia anterior).
+        try:
+            repetido = unicidade.achar_repeticao(
+                item.titulo, item.roteiro,
+                unicidade.carregar_historico(so_publicados=True), ignorar_id=item.item_id)
+        except Exception as exc:
+            repetido = None
+            print(f"[publish] aviso: checagem de repeticao falhou ({exc!r}) - seguindo.")
+        if repetido:
+            print(f"[publish] PULADO {item.item_id}: tema repetido - {repetido}", flush=True)
+            mark_item_published(review_path, date_str, item.item_id)
+            _salvar_status_git(item.item_id)
+            continue
         try:
             ultimo = _process_item(batch, item, date_str, review_path, ultimo)
+        except CotaEsgotada as exc:
+            print(f"[publish] COTA DIARIA DO YOUTUBE ESGOTADA - paro por hoje ({exc}).")
+            return 2
         except Exception:
             print(f"[publish] ERRO em {item.item_id} - pulando pro próximo item:")
             traceback.print_exc()
