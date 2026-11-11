@@ -66,10 +66,9 @@ def _gancho(roteiro: str) -> str:
 
 
 def sim_gancho(a: str, b: str) -> float:
-    return max(
-        difflib.SequenceMatcher(None, normalizar(_gancho(a)), normalizar(_gancho(b))).ratio(),
-        _jaccard(set(_tokens(_gancho(a))), set(_tokens(_gancho(b)))),
-    )
+    """So conta palavras de conteudo (frases com a mesma moldura, tipo 'Voce
+    sabia que...?', nao sao o mesmo gancho)."""
+    return _jaccard(set(_tokens(_gancho(a))), set(_tokens(_gancho(b))))
 
 
 def _trigramas(txt: str) -> set:
