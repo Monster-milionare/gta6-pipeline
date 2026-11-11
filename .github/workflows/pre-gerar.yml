@@ -1,0 +1,65 @@
+name: Pre-gerar lote de amanha
+
+on:
+  schedule:
+    - cron: "17 2 * * *"    # ~23:17 Brasilia: deixa o lote de amanha pronto antes das 6h
+  workflow_dispatch:
+    inputs:
+      data:
+        description: "data AAAA-MM-DD (vazio = amanha em Brasilia)"
+        required: false
+        default: ""
+
+permissions:
+  contents: write
+
+# Grupo proprio: nunca disputa fila com a publicacao.
+concurrency:
+  group: gta6-pre-gerar
+  cancel-in-progress: false
+
+env:
+  TZ: America/Sao_Paulo
+
+jobs:
+  pregerar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - run: pip install -r requirements.txt
+
+      - name: Gerar o lote
+        env:
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          DATA_IN: ${{ github.event.inputs.data }}
+        run: |
+          if [ -n "$DATA_IN" ]; then ALVO="$DATA_IN"; else ALVO=$(date -d tomorrow +%F); fi
+          echo "[pre-gerar] data alvo: $ALVO"
+          if [ -f "review/$ALVO.md" ]; then
+            echo "[pre-gerar] review/$ALVO.md ja existe - nada a fazer."
+            exit 0
+          fi
+          for t in 1 2 3 4; do
+            python generate.py "$ALVO" && break
+            echo "[pre-gerar] tentativa $t falhou - aguardando"
+            sleep $((t * 40))
+          done
+          if [ ! -f "review/$ALVO.md" ]; then
+            echo "::error::nao foi possivel pre-gerar o lote de $ALVO (a execucao das 6h gera no momento)"
+            exit 1
+          fi
+          git config user.name "gta6-pipeline-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add review/
+          git diff --cached --quiet || git commit -m "chore: lote pre-gerado $ALVO"
+          for i in 1 2 3 4 5; do
+            if git push; then break; fi
+            git pull --rebase --autostash origin main
+            sleep 5
+          done
