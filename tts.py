@@ -130,6 +130,41 @@ def _limpar_para_voz(text: str) -> str:
     return re.sub(r"\s+", " ", text.translate(_TROCAS_VOZ)).strip()
 
 
+# Pronuncia: a voz le "GTA VI"/"GTA 6" errado (sexto, "vi"...). Pra VOZ troca
+# por "gê tê á seis"; na LEGENDA continua aparecendo "GTA VI" (ver
+# _restaurar_palavras, que junta de volta os tempos das 4 palavras faladas).
+_RE_GTA6 = re.compile(r"\bGTA\s*[-]?\s*(?:VI|6)\b", re.IGNORECASE)
+_FALA_GTA6 = "gê tê á seis"
+
+
+def _pronuncia(text: str) -> str:
+    return _RE_GTA6.sub(_FALA_GTA6, text)
+
+
+def _norm_palavra(p: str) -> str:
+    return re.sub(r"[^a-zê á]", "", p.lower()).replace(" ", "")
+
+
+def _restaurar_palavras(words: list) -> list:
+    """Junta 'gê tê á seis' (4 palavras do TTS) de volta em 'GTA VI' pra legenda."""
+    alvo = "gêtêáseis"
+    out, i = [], 0
+    while i < len(words):
+        acum, j = "", i
+        while j < len(words) and j < i + 5 and len(acum) < len(alvo):
+            acum += _norm_palavra(words[j][0])
+            j += 1
+        if acum == alvo:
+            ultimo = words[j - 1][0]
+            pont = re.sub(r"[\w]", "", ultimo, flags=re.UNICODE).strip()
+            out.append(("GTA VI" + pont, words[i][1], words[j - 1][2]))
+            i = j
+        else:
+            out.append(words[i])
+            i += 1
+    return out
+
+
 def _synth_gtts(text: str, out_path: Path) -> list:
     """Ultimo recurso se o edge-tts estiver fora do ar: voz do Google Tradutor
     (mais robotica, mas mantem o canal publicando). Sem tempo por palavra
@@ -144,7 +179,7 @@ def _synth_gtts(text: str, out_path: Path) -> list:
 
 
 def _synth_com_fallback(text: str, out_path: Path, rate: str, pitch: str) -> list:
-    texto = _limpar_para_voz(text) or text
+    texto = _pronuncia(_limpar_para_voz(text) or text)
     ultimo_erro = None
     # 1) vozes do edge-tts, varias tentativas com espera crescente (soluco de
     #    rede/servico). Na ultima volta tenta sem rate/pitch customizados.
@@ -152,7 +187,7 @@ def _synth_com_fallback(text: str, out_path: Path, rate: str, pitch: str) -> lis
         for voice in VOICE_PREFERENCIAS:
             r, p = (rate, pitch) if volta < 2 else ("+0%", "+0Hz")
             try:
-                return asyncio.run(_synth_one(texto, out_path, voice, r, p))
+                return _restaurar_palavras(asyncio.run(_synth_one(texto, out_path, voice, r, p)))
             except Exception as exc:
                 ultimo_erro = exc
         time.sleep(2 + 4 * volta)
