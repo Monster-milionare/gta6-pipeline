@@ -34,20 +34,25 @@ from content_batch import load_batch
 
 GRAPH = "https://graph.facebook.com/v21.0"
 POSTADOS = config.REVIEW_DIR / "instagram_postados.txt"
-HASHTAGS = "#GTA6 #GTAVI #RockstarGames #Gaming #GTA"
+HASHTAGS = ("#gta6 #gtavi #gta6brasil #rockstargames #gtavicity #games #gamer "
+            "#noticiasgames #trailer #gta")
+POSTADOS_REELS = config.REVIEW_DIR / "reels" / "postados.txt"   # escrito pelo reels.py
 
 
 def _ja_postados() -> set:
-    if not POSTADOS.exists():
-        return set()
-    return {l.strip() for l in POSTADOS.read_text(encoding="utf-8").splitlines() if l.strip()}
+    feitos = set()
+    for arq in (POSTADOS, POSTADOS_REELS):
+        if arq.exists():
+            feitos |= {l.strip() for l in arq.read_text(encoding="utf-8").splitlines() if l.strip()}
+    return feitos
 
 
 def _legenda(item) -> str:
     if item.item_id.startswith("teoria-"):
         pedido = "Qual teoria voce acha mais certa? Comenta 1 ou 2! A mais votada vira video exclusivo."
     else:
-        pedido = "Segue o perfil pra acompanhar tudo de GTA VI ate o lancamento (19/11/2026)."
+        pedido = ("Segue @gta6brasil.hoje pra nao perder nada de GTA VI ate o lancamento "
+                  "(19/11/2026). Compartilha com quem joga GTA!")
     return f"{item.titulo}\n\n{pedido}\n\n{HASHTAGS}"[:2200]
 
 
