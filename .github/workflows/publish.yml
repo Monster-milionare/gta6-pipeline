@@ -163,6 +163,15 @@ jobs:
           echo "codigo=$code" >> "$GITHUB_OUTPUT"
           exit $code
 
+      - name: Postar os shorts como Reels no Instagram (so se os secrets existirem)
+        if: always() && steps.checar.outputs.pendente == 'true'
+        continue-on-error: true
+        timeout-minutes: 40
+        env:
+          IG_ACCESS_TOKEN: ${{ secrets.IG_ACCESS_TOKEN }}
+          IG_USER_ID: ${{ secrets.IG_USER_ID }}
+        run: python instagram.py
+
       - name: Salvar status de publicado no repositorio (rede de seguranca)
         if: always() && steps.checar.outputs.pendente == 'true'
         run: |
