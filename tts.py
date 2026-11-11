@@ -20,6 +20,8 @@ import inspect
 import random
 import re
 import subprocess
+import sys
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -115,17 +117,53 @@ async def _synth_one(text: str, out_path: Path, voice: str, rate: str, pitch: st
     return words
 
 
+_TROCAS_VOZ = {
+    0x2010: "-", 0x2011: "-", 0x2012: "-", 0x2013: "-", 0x2014: "-", 0x2015: "-",
+    0x00A0: " ", 0x202F: " ", 0x2009: " ", 0x200B: None, 0x200D: None, 0xFEFF: None,
+    0x2018: "'", 0x2019: "'", 0x201C: '"', 0x201D: '"', 0x2022: "-", 0x2026: "...",
+}
+
+
+def _limpar_para_voz(text: str) -> str:
+    """Caracteres 'especiais' (hifen nao-quebravel, aspas curvas...) ja
+    derrubaram a sintese de voz de uma frase; troca por equivalentes ASCII."""
+    return re.sub(r"\s+", " ", text.translate(_TROCAS_VOZ)).strip()
+
+
+def _synth_gtts(text: str, out_path: Path) -> list:
+    """Ultimo recurso se o edge-tts estiver fora do ar: voz do Google Tradutor
+    (mais robotica, mas mantem o canal publicando). Sem tempo por palavra
+    (words=[]) - o render.py estima os tempos."""
+    try:
+        from gtts import gTTS
+    except ImportError:
+        subprocess.run([sys.executable, "-m", "pip", "install", "-q", "gTTS"], check=False)
+        from gtts import gTTS
+    gTTS(text=text, lang="pt", tld="com.br").save(str(out_path))
+    return []
+
+
 def _synth_com_fallback(text: str, out_path: Path, rate: str, pitch: str) -> list:
+    texto = _limpar_para_voz(text) or text
     ultimo_erro = None
-    for voice in VOICE_PREFERENCIAS:
-        for _tentativa in range(2):
+    # 1) vozes do edge-tts, varias tentativas com espera crescente (soluco de
+    #    rede/servico). Na ultima volta tenta sem rate/pitch customizados.
+    for volta in range(3):
+        for voice in VOICE_PREFERENCIAS:
+            r, p = (rate, pitch) if volta < 2 else ("+0%", "+0Hz")
             try:
-                return asyncio.run(_synth_one(text, out_path, voice, rate, pitch))
-            except Exception as exc:  # voz fora do catálogo ou soluço de rede
+                return asyncio.run(_synth_one(texto, out_path, voice, r, p))
+            except Exception as exc:
                 ultimo_erro = exc
-    raise RuntimeError(
-        f"Nenhuma voz da lista {VOICE_PREFERENCIAS} funcionou."
-    ) from ultimo_erro
+        time.sleep(2 + 4 * volta)
+    # 2) fallback final: gTTS
+    try:
+        print(f"[tts] edge-tts falhou ({ultimo_erro!r}) - usando gTTS de reserva.", flush=True)
+        return _synth_gtts(texto, out_path)
+    except Exception as exc:
+        raise RuntimeError(
+            f"Nenhuma voz funcionou (edge-tts: {ultimo_erro!r}; gTTS: {exc!r})."
+        ) from exc
 
 
 def synthesize_sentences(text: str, out_dir: Path, cta: bool = False) -> list:
