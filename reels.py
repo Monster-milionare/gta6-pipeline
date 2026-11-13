@@ -188,6 +188,7 @@ def renderizar_e_postar(item, token: str, ig_id: str) -> str:
     video = config.ASSETS_DIR / "tmp" / f"{item.item_id}.mp4"
     _render_mod.CORTE_MAX, _render_mod.PLANO_MAX = 1.8, 2.3
     render_video("short", item.titulo, segments, video)
+    assert getattr(_render_mod, "ULTIMO_MOTOR", "motion") == "motion", "render caiu no motor classico (visual antigo) - nao postado"
     media = instagram.postar_reel(token, ig_id, video, _legenda(item))
     try:
         video.unlink()
