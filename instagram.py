@@ -21,6 +21,7 @@ termina sempre com codigo 0.
 Uso: python instagram.py
 """
 import os
+import subprocess
 import sys
 import time
 from datetime import datetime
@@ -63,8 +64,30 @@ def _erro(resp) -> str:
         return f"HTTP {resp.status_code}: {resp.text[:200]}"
 
 
-def postar_reel(token: str, ig_id: str, video: Path, legenda: str) -> str:
-    """Devolve o id da midia publicada ou levanta RuntimeError."""
+def _normalizar(video: Path) -> Path:
+    """Re-encoda num perfil conservador que o Instagram aceita sempre.
+
+    Alguns arquivos do motor de render eram recusados no upload (erro
+    ProcessingFailedError); o mesmo video, re-encodado assim, passa."""
+    saida = video.with_name(video.stem + "_ig.mp4")
+    cmd = ["ffmpeg", "-y", "-v", "error", "-i", str(video),
+           "-c:v", "libx264", "-preset", "veryfast", "-profile:v", "high", "-level", "4.1",
+           "-crf", "23", "-maxrate", "8M", "-bufsize", "16M", "-pix_fmt", "yuv420p",
+           "-r", "30", "-g", "60",
+           "-c:a", "aac", "-b:a", "128k", "-ar", "44100", "-ac", "2",
+           "-movflags", "+faststart", str(saida)]
+    try:
+        r = subprocess.run(cmd, capture_output=True, timeout=600)
+        if r.returncode == 0 and saida.exists() and saida.stat().st_size > 50_000:
+            return saida
+        print(f"[instagram] re-encode falhou (codigo {r.returncode}) - uso o arquivo original.", flush=True)
+    except Exception as exc:
+        print(f"[instagram] re-encode indisponivel ({exc!r}) - uso o arquivo original.", flush=True)
+    return video
+
+
+def _enviar(token: str, ig_id: str, video: Path, legenda: str) -> str:
+    """Cria o container, envia o video e espera o processamento. Devolve o id do container."""
     r = requests.post(f"{GRAPH}/{ig_id}/media", data={
         "media_type": "REELS", "upload_type": "resumable", "caption": legenda,
         "share_to_feed": "true", "access_token": token}, timeout=60)
@@ -95,11 +118,37 @@ def postar_reel(token: str, ig_id: str, video: Path, legenda: str) -> str:
                 raise RuntimeError(f"processamento falhou: {s.json()}")
     if status != "FINISHED":
         raise RuntimeError(f"Instagram nao terminou de processar (ultimo status: {status or '?'})")
+    return container
+
+
+def postar_reel(token: str, ig_id: str, video: Path, legenda: str) -> str:
+    """Devolve o id da midia publicada ou levanta RuntimeError.
+
+    O envio (container + upload + processamento) tenta ate 3 vezes, sempre com
+    container novo; a publicacao final acontece uma vez so (sem risco de duplicar)."""
+    arquivo = _normalizar(video)
+    ultimo = None
+    for tentativa in range(1, 4):
+        try:
+            container = _enviar(token, ig_id, arquivo, legenda)
+            break
+        except RuntimeError as exc:
+            ultimo = exc
+            print(f"[instagram] envio falhou (tentativa {tentativa}/3): {str(exc)[:200]}", flush=True)
+            if tentativa < 3:
+                time.sleep(20 * tentativa)
+    else:
+        raise ultimo
 
     p = requests.post(f"{GRAPH}/{ig_id}/media_publish", timeout=60,
                       data={"creation_id": container, "access_token": token})
     if p.status_code != 200:
         raise RuntimeError(f"publicar falhou: {_erro(p)}")
+    try:
+        if arquivo != video:
+            arquivo.unlink()
+    except Exception:
+        pass
     return p.json().get("id", "?")
 
 
