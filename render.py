@@ -1,16 +1,4 @@
-ULTIMO_MOTOR = "?"   # "motion" ou "classico" - preenchido por render_video
-
-
-def render_video(kind: str, titulo: str, segments: list, out_path: Path) -> Path:
-    global ULTIMO_MOTOR
-    if not segments:
-        raise ValueError("Nenhum segmento de narração pra montar o vídeo.")
-    try:
-        saida = _render_motion(kind, titulo, segments, out_path)
-        ULTIMO_MOTOR = "motion"
-        return saida
-    except Exception:
-        ULTIMO_MOTOR = "classico""""
+"""
 Motor de vídeo "motion" (100% grátis: Python + Pillow + numpy + ffmpeg).
 
 Substitui o slideshow antigo (que virou render_classico.py e continua aqui
@@ -984,7 +972,7 @@ def _render_motion(kind: str, titulo: str, segments: list, out_path: Path) -> Pa
                 m = 14 if (dx or dy) else 0
                 cw, ch = w / zoom - 2 * m, h / zoom - 2 * m
                 bx, by = (w - cw) / 2 + dx, (h - ch) / 2 + dy
-              bx, by = min(max(bx, 0.0), w - cw), min(max(by, 0.0), h - ch)
+                bx, by = min(max(bx, 0.0), w - cw), min(max(by, 0.0), h - ch)
                 frame = frame.resize((w, h), Image.BILINEAR, box=(bx, by, bx + cw, by + ch))
             if forte and n_plano < 3:
                 frame = Image.blend(frame, branco, (0.30, 0.16, 0.07)[n_plano])
