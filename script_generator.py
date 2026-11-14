@@ -55,6 +55,21 @@ Regras rígidas:
 12. Teorias: so podem partir de fatos de <fatos_confirmados>; tudo que for
     especulacao precisa ser dito como "teoria"/"e se"/"pode ser", nunca como
     fato. Nunca use "vazou", "fonte" ou "dizem que".
+13. TITULOS QUE VIRALIZAM (dados reais do proprio canal: "Por que o estado se
+    chama Leonida?" fez 899 views, "GTA VI rodara a 30fps?" 612 e "Extended Look:
+    o que a jogabilidade oficial mostrou" 847; ja "Contagem regressiva: ..." e
+    "Trailer 1: o que ..." ficaram abaixo de 10). Prefira: pergunta direta e
+    especifica, numero concreto, ou curiosidade que so fecha vendo o video.
+    PROIBIDO comecar titulo com "Contagem regressiva", "Trailer 1", "Teoria:"
+    ou "Evolucao". Nada de titulo generico com dois-pontos.
+14. A primeira frase do short quebra o padrao em ate 10 palavras, sem
+    cumprimento e sem apresentacao. A ULTIMA frase fecha o loop voltando para o
+    gancho da primeira (isso faz a pessoa rever o video e sobe a retencao).
+15. Shorts: um unico assunto, promessa clara no inicio, 85-115 palavras, uma
+    virada de ritmo a cada duas frases. Feche com uma pergunta de ESCOLHA
+    ("A ou B? Comenta qual") que gere comentario facil.
+16. Nunca clickbait falso: o que o titulo promete precisa ser entregue no
+    roteiro, com fato confirmado.
 """
 
 def _load_knowledge_base() -> str:
@@ -92,18 +107,20 @@ MODELOS = [config.GROQ_MODEL, "llama-3.3-70b-versatile", "openai/gpt-oss-20b"]
 # Um formato/angulo diferente por vaga do dia (rotaciona com a data), pra o
 # lote nascer variado em vez de depender so do modelo "lembrar" de variar.
 ANGULOS = [
-    "pergunta provocativa que o torcedor de GTA faria",
-    "comparacao entre dois trailers ou dois jogos da franquia",
-    "contagem regressiva para o lancamento (19/11/2026) e o que fazer ate la",
-    "curiosidade sobre um personagem confirmado",
-    "um lugar/cenario do mapa mostrado nos trailers",
-    "plataformas, pre-carga e preparacao tecnica",
-    "historia da franquia GTA e como chegou ate aqui",
-    "reacao a um detalhe especifico de um trailer",
-    "numeros e recordes do marketing (so os confirmados)",
-    "perguntas e respostas rapidas sobre o que ja foi confirmado",
-    "o que a Rockstar ja disse oficialmente e o que ainda nao disse",
-    "tour pelas cenas do trailer, uma a uma",
+    "Por que...? curiosidade especifica sobre algo confirmado (nome de lugar, referencia, detalhe de cena)",
+    "pergunta de sim ou nao que o fa faz, com numero ou plataforma no titulo (ex: roda a 30fps? chega no Xbox?)",
+    "verdade ou mito: desmonte uma duvida comum usando so fatos confirmados",
+    "3 coisas para fazer ANTES do lancamento (pre-carga, espaco no disco, conta): lista curta de 3",
+    "faltam X dias: o que ja e oficial a poucos dias do lancamento (use o numero exato de dias)",
+    "Jason e Lucia: um detalhe da relacao ou personalidade mostrado nos trailers (so o confirmado)",
+    "um lugar de Leonida mostrado nos trailers e o que ele lembra da vida real (so o confirmado)",
+    "erro comum que o fa comete antes do lancamento (pre-carga, edicao, preco), explicado so com fatos oficiais",
+    "comparacao direta GTA V vs GTA VI usando so numeros e fatos oficiais",
+    "a pergunta que todo mundo faz e a resposta oficial em 30 segundos",
+    "A ou B: duas opcoes e pedido de voto nos comentarios (plataforma, personagem, cidade)",
+    "o detalhe do trailer que quase ninguem notou (so se estiver nos fatos confirmados)",
+    "o que a Rockstar ainda NAO disse oficialmente e por que isso importa",
+    "numeros e recordes do marketing, so os confirmados",
 ]
 
 
@@ -183,13 +200,16 @@ def _gerar_um(client, kind: str, fatos: str, proibidos: list, angulo: str, motiv
             "rotulada, nunca como fato); e feche pedindo 'Comenta 1 ou 2: a teoria "
             "mais votada vira video exclusivo aqui no canal'")
     lista = "\n".join(f"- {t}" for t in proibidos[-80:]) or "(nenhum ainda)"
+    dias = (date_cls(2026, 11, 19) - date_cls.today()).days
+    prazo = (f"Faltam {dias} dia(s) para o lancamento (19/11/2026); se citar prazo, use esse numero exato.\n"
+             if dias >= 0 else "")
     aviso = f"\nA tentativa anterior foi recusada: {motivo}. Corrija isso.\n" if motivo else ""
     prompt = (
         f"<fatos_confirmados>\n{fatos}\n</fatos_confirmados>\n\n"
         f"<temas_ja_usados>\n{lista}\n</temas_ja_usados>\n"
         f"REGRA ABSOLUTA: o assunto/titulo novo nao pode repetir nem parafrasear nada "
         f"da lista acima.\n{aviso}\n"
-        f"Gere {alvo}. Formato/angulo sugerido: {angulo}. Responda so com JSON: "
+        f"{prazo}Gere {alvo}. Formato/angulo sugerido: {angulo}. Responda so com JSON: "
         f'{{"titulo": "...", "roteiro": "..."}}'
     )
     data = _chat(client, prompt)
