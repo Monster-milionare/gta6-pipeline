@@ -65,7 +65,8 @@ Regras rígidas:
 14. A primeira frase do short quebra o padrao em ate 10 palavras, sem
     cumprimento e sem apresentacao. A ULTIMA frase fecha o loop voltando para o
     gancho da primeira (isso faz a pessoa rever o video e sobe a retencao).
-15. Shorts: um unico assunto, promessa clara no inicio, 85-115 palavras, uma
+15. SOMENTE em shorts (o roteiro longo NAO muda e segue a regra 4, com 1300-1900
+    palavras): um unico assunto, promessa clara no inicio, 85-115 palavras, uma
     virada de ritmo a cada duas frases. Feche com uma pergunta de ESCOLHA
     ("A ou B? Comenta qual") que gere comentario facil.
 16. Nunca clickbait falso: o que o titulo promete precisa ser entregue no
