@@ -124,6 +124,9 @@ ANGULOS = [
 ]
 
 
+_DATA_ALVO = [None]   # data (AAAA-MM-DD) do lote em geracao; usada na contagem de dias
+
+
 def _extract_json(raw_text: str) -> dict:
     text = raw_text.strip()
     ini, fim = text.find("{"), text.rfind("}")
@@ -200,7 +203,8 @@ def _gerar_um(client, kind: str, fatos: str, proibidos: list, angulo: str, motiv
             "rotulada, nunca como fato); e feche pedindo 'Comenta 1 ou 2: a teoria "
             "mais votada vira video exclusivo aqui no canal'")
     lista = "\n".join(f"- {t}" for t in proibidos[-80:]) or "(nenhum ainda)"
-    dias = (date_cls(2026, 11, 19) - date_cls.today()).days
+    base = date_cls.fromisoformat(_DATA_ALVO[0]) if _DATA_ALVO[0] else date_cls.today()
+    dias = (date_cls(2026, 11, 19) - base).days
     prazo = (f"Faltam {dias} dia(s) para o lancamento (19/11/2026); se citar prazo, use esse numero exato.\n"
              if dias >= 0 else "")
     aviso = f"\nA tentativa anterior foi recusada: {motivo}. Corrija isso.\n" if motivo else ""
@@ -219,6 +223,7 @@ def _gerar_um(client, kind: str, fatos: str, proibidos: list, angulo: str, motiv
 def generate_daily_content(date_str: str | None = None) -> DailyBatch:
     date_str = date_str or date_cls.today().isoformat()
     fatos = _load_knowledge_base()
+    _DATA_ALVO[0] = date_str
 
     if not config.GROQ_API_KEY:
         raise RuntimeError(
