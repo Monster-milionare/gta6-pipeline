@@ -124,19 +124,19 @@ def _enviar(token: str, ig_id: str, video: Path, legenda: str) -> str:
 def postar_reel(token: str, ig_id: str, video: Path, legenda: str) -> str:
     """Devolve o id da midia publicada ou levanta RuntimeError.
 
-    O envio (container + upload + processamento) tenta ate 3 vezes, sempre com
+    O envio (container + upload + processamento) tenta ate 5 vezes, sempre com
     container novo; a publicacao final acontece uma vez so (sem risco de duplicar)."""
     arquivo = _normalizar(video)
     ultimo = None
-    for tentativa in range(1, 4):
+    for tentativa in range(1, 6):
         try:
             container = _enviar(token, ig_id, arquivo, legenda)
             break
         except RuntimeError as exc:
             ultimo = exc
-            print(f"[instagram] envio falhou (tentativa {tentativa}/3): {str(exc)[:200]}", flush=True)
-            if tentativa < 3:
-                time.sleep(20 * tentativa)
+            print(f"[instagram] envio falhou (tentativa {tentativa}/5): {str(exc)[:200]}", flush=True)
+            if tentativa < 5:
+                time.sleep(30 * tentativa)
     else:
         raise ultimo
 
@@ -186,7 +186,7 @@ def main() -> int:
 
     for n, (item, video) in enumerate(pendentes):
         if n:
-            time.sleep(20)
+            time.sleep(60)
         try:
             media = postar_reel(token, ig_id, video, _legenda(item))
         except Exception as exc:
