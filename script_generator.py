@@ -125,6 +125,15 @@ ANGULOS = [
 ]
 
 
+ANGULOS_LONGO = [
+    "analise completa: tudo que a Rockstar ja confirmou oficialmente sobre GTA VI, em blocos",
+    "tour pelas cenas dos trailers, uma a uma, com o que cada cena mostra de confirmado",
+    "perguntas e respostas: as 10 duvidas que todo fa tem e as respostas oficiais",
+    "historia da franquia GTA ate aqui e onde GTA VI se encaixa",
+    "guia completo para o lancamento: pre-carga, plataformas, edicoes e o que esperar",
+    "protagonistas, cenario e mapa: o que ja se sabe de Jason, Lucia e Leonida",
+]
+
 _DATA_ALVO = [None]   # data (AAAA-MM-DD) do lote em geracao; usada na contagem de dias
 
 
@@ -194,7 +203,7 @@ def _gerar_um(client, kind: str, fatos: str, proibidos: list, angulo: str, motiv
               tipo: str = ""):
     """Pede UM roteiro (cada item em sua propria chamada: respostas curtas
     quase nunca quebram o JSON, e cada uma ja nasce sabendo o que e proibido)."""
-    alvo = ("1 roteiro de video longo (1300-1900 palavras)" if kind == "long"
+    alvo = ("1 roteiro de video longo de 1500 a 1900 palavras (abaixo de 1300 sera recusado: desenvolva cada bloco com detalhes confirmados)" if kind == "long"
             else "1 roteiro de short (80-150 palavras)")
     if tipo == "teoria":
         alvo = (
@@ -252,7 +261,8 @@ def generate_daily_content(date_str: str | None = None) -> DailyBatch:
 
     itens, aceitos, descartados = [], [], []
     for n, (kind, item_id, tipo) in enumerate(vagas):
-        angulo = ANGULOS[(deslocamento + n * 5) % len(ANGULOS)]
+        angulo = (ANGULOS_LONGO[deslocamento % len(ANGULOS_LONGO)] if kind == "long"
+                  else ANGULOS[(deslocamento + n * 5) % len(ANGULOS)])
         motivo, recusados, ok = None, [], False
         for tentativa in range(1, 6):
             proibidos = titulos_hist + [a[1] for a in aceitos] + recusados
