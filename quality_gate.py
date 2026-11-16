@@ -107,7 +107,7 @@ def avaliar_lote(batch: DailyBatch) -> tuple[list[str], list[str]]:
         texto_lower = item.roteiro.lower()
         eh_vazamento = item.item_id.startswith("vazamento-")
         if eh_vazamento and not any(r in texto_lower for r in RESSALVA_VAZAMENTO):
-            problemas.append(f"{item.item_id}: vazamento sem a ressalva de 'nao confirmado'.")
+            bloqueantes.append(f"{item.item_id}: vazamento sem a ressalva de 'nao confirmado'.")
         for flag in (RED_FLAGS_VAZAMENTO if eh_vazamento else RED_FLAGS):
             if flag in texto_lower:
                 bloqueantes.append(
