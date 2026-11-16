@@ -186,8 +186,12 @@ def renderizar_e_postar(item, token: str, ig_id: str) -> str:
     segments = synthesize_sentences(item.roteiro, audio_dir)
     segments = segments + synthesize_sentences(_cta(item), audio_dir / "cta", cta=True)
     video = config.ASSETS_DIR / "tmp" / f"{item.item_id}.mp4"
-    _render_mod.CORTE_MAX, _render_mod.PLANO_MAX = 1.8, 2.3
-    render_video("short", item.titulo, segments, video)
+    try:
+        import estilos
+        estilo = item.estilo or estilos.planejar_dia([(item.item_id, "short")], item.item_id)[0][0]
+    except Exception:
+        estilo = None
+    render_video("short", item.titulo, segments, video, estilo)
     assert getattr(_render_mod, "ULTIMO_MOTOR", "motion") == "motion", "render caiu no motor classico (visual antigo) - nao postado"
     media = instagram.postar_reel(token, ig_id, video, _legenda(item))
     try:
