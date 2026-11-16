@@ -196,6 +196,64 @@ def bloco_para_prompt(noticias: list) -> str:
     return "\n".join(linhas)
 
 
+LEAK_EXTRAS = ("dexerto.com", "insider-gaming.com", "gamerant.com", "thegamer.com", "gameranx.com",
+               "gamesindustry.biz", "tecnoblog.net", "meiobit.com", "voxel.com.br")
+CONSULTAS_VAZAMENTO = ["GTA 6 leak", "GTA 6 vazamento", "GTA 6 leaker", "GTA 6 rumor",
+                       "GTA 6 Cyberleaks", "GTA 6 insider"]
+PERFIS_CONHECIDOS = ("cyberleaks", "tez2", "billbil-kun", "gta 6 leaks", "insider gaming")
+JANELA_VAZAMENTO_HORAS = 96
+_MARCAS_LEAK = ("leak", "leaker", "rumor", "rumour", "alleged", "reportedly", "suposto", "supostamente",
+                "vazamento", "vazou", "vaza", "insider", "cyberleaks", "tez2", "billbil")
+
+
+def buscar_vazamentos(max_itens: int = 4) -> list:
+    """Relatos/vazamentos NAO OFICIAIS recentes noticiados por 1+ veiculo conhecido.
+    Sai so TEXTO (manchete + veiculo + perfil citado na propria manchete): o roteiro
+    trata tudo como rumor nao confirmado. Nunca levanta erro."""
+    try:
+        itens = []
+        for consulta in CONSULTAS_VAZAMENTO:
+            for pt in (True, False):
+                try:
+                    itens += _ler_itens(_baixar_rss(consulta, pt))
+                except Exception as exc:
+                    print(f"[radar] busca de vazamento '{consulta}' falhou: {str(exc)[:80]}", flush=True)
+        corte = datetime.now(timezone.utc) - timedelta(hours=JANELA_VAZAMENTO_HORAS)
+        aceitos = CONFIAVEIS + LEAK_EXTRAS
+        grupos = []
+        for it in sorted(itens, key=lambda x: x["data"], reverse=True):
+            baixo = _sem_acento(it["titulo"].lower())
+            if it["data"] < corte or _casa(it["dominio"], OFICIAIS) or not _casa(it["dominio"], aceitos):
+                continue
+            if not any(m in baixo for m in _MARCAS_LEAK):
+                continue
+            tk = _tokens(it["titulo"])
+            for g in grupos:
+                if _mesma_historia(tk, g["tokens"]):
+                    g["itens"].append(it)
+                    g["tokens"] |= tk
+                    break
+            else:
+                grupos.append({"tokens": tk, "itens": [it]})
+        saida = []
+        for g in grupos:
+            veic = {}
+            for it in g["itens"]:
+                veic.setdefault(it["dominio"], it["veiculo"])
+            principal = g["itens"][0]
+            texto = _sem_acento(" ".join(i["titulo"] for i in g["itens"]).lower())
+            perfil = next((p for p in PERFIS_CONHECIDOS if p in texto), "")
+            saida.append({"titulo": principal["titulo"], "veiculos": sorted(veic.values()),
+                          "perfil": perfil, "data": principal["data"].astimezone(timezone.utc).strftime("%Y-%m-%d"),
+                          "links": [i["link"] for i in g["itens"][:3]]})
+        saida.sort(key=lambda n: (bool(n["perfil"]), len(n["veiculos"]), n["data"]), reverse=True)
+        print(f"[radar] {len(saida)} relato(s) de vazamento nao confirmado(s) achados.", flush=True)
+        return saida[:max_itens]
+    except Exception as exc:
+        print(f"[radar] erro nos vazamentos: {exc!r}", flush=True)
+        return []
+
+
 def angulos(noticias: list) -> list:
     return [f"reagir a noticia recente: \"{n['titulo']}\" (cite o veiculo e so use o que a manchete diz)"
             for n in noticias[:4]]
