@@ -27,6 +27,7 @@ mandado pro ffmpeg, então tudo se mexe o tempo todo:
 Se QUALQUER coisa aqui falhar, render_video cai sozinho pro motor
 clássico - um erro de edição nunca impede o vídeo do dia de sair.
 """
+import dataclasses
 import math
 import random
 import re
@@ -40,9 +41,10 @@ from pathlib import Path
 from zoneinfo import ZoneInfo
 
 import numpy as np
-from PIL import Image, ImageDraw, ImageFilter, ImageFont
+from PIL import Image, ImageChops, ImageDraw, ImageFilter, ImageFont
 
 import config
+import estilos
 import mascote_anim
 
 FPS = 30
@@ -357,14 +359,14 @@ def _montar_falas(segments) -> tuple[list, np.ndarray]:
     return falas, np.concatenate(pedacos) if pedacos else np.zeros(SR, dtype=np.float32)
 
 
-def _montar_blocos(falas) -> list:
+def _montar_blocos(falas, agrupar: bool = True) -> list:
     blocos = []
     for fala in falas:
         grupos, atual = [], []
         for pal in fala.palavras:
             texto_atual = " ".join(p[0] for p in atual)
             curto = all(len(p[0]) <= 3 for p in atual)
-            if atual and curto and len(atual) < 3 and len(texto_atual) + 1 + len(pal[0]) <= 15:
+            if agrupar and atual and curto and len(atual) < 3 and len(texto_atual) + 1 + len(pal[0]) <= 15:
                 atual.append(pal)
             else:
                 if atual:
@@ -415,16 +417,18 @@ def _montar_carimbos(falas, inicio_minimo: float) -> list:
     return carimbos
 
 
-def _montar_planos(falas, total: float) -> list:
+def _montar_planos(falas, total: float, corte_max: float | None = None, plano_max: float | None = None) -> list:
+    corte_max = CORTE_MAX if corte_max is None else corte_max
+    plano_max = PLANO_MAX if plano_max is None else plano_max
     planos = []
     for i, fala in enumerate(falas):
         fim = falas[i + 1].t0 if i + 1 < len(falas) else total
         tags, _rot = _tema(fala.texto)
         cortes = [fala.t0 if i else 0.0]
         inicios = [p[1] for p in fala.palavras]
-        while fim - cortes[-1] > PLANO_MAX:
-            alvo = cortes[-1] + CORTE_MAX
-            perto = [x for x in inicios if abs(x - alvo) < 0.6 and x > cortes[-1] + 1.2]
+        while fim - cortes[-1] > plano_max:
+            alvo = cortes[-1] + corte_max
+            perto = [x for x in inicios if abs(x - alvo) < 0.6 and x > cortes[-1] + min(1.2, corte_max * 0.6)]
             cortes.append(min(perto, key=lambda x: abs(x - alvo)) if perto else alvo)
         for j, c in enumerate(cortes):
             prox = cortes[j + 1] if j + 1 < len(cortes) else fim
@@ -563,7 +567,8 @@ def _caixa(w: int, h: int, cor, raio: int) -> Image.Image:
 class Hud:
     """Faixa do topo: [FALTAM X DIAS] - GTA VI / assunto atual / contagem regressiva."""
 
-    def __init__(self, kind: str, w: int, h: int, falas: list):
+    def __init__(self, kind: str, w: int, h: int, falas: list, modo: str = "completo"):
+        self.modo = modo
         self.w, self.h = w, h
         self.u = (w if kind == "short" else h) / 1080  # unidade de escala
         self.topo = int(h * (0.075 if kind == "short" else 0.045))
@@ -625,11 +630,17 @@ class Hud:
         return self._cache_relogio[texto]
 
     def desenhar(self, frame: Image.Image, t: float) -> None:
+        if self.modo == "nenhum":
+            return
         u = self.u
         entra = _ease_out(t / 0.35)
         desliza = int((1 - entra) * -80 * u)
         x, y = self.margem, self.topo + desliza
         frame.paste(self.chip, (x, y), self.chip)
+        if self.modo == "minimo":
+            rel = self._relogio(t)
+            frame.paste(rel, (self.w - self.margem - rel.width, y), rel)
+            return
         px = x + self.chip.width + int(18 * u)
         # ponto vermelho piscando (tipo "gravando")
         if int(t * 2) % 2 == 0:
@@ -650,13 +661,33 @@ class Hud:
 
 
 class Legendas:
-    def __init__(self, kind: str, w: int, h: int, blocos: list):
+    def __init__(self, kind: str, w: int, h: int, blocos: list, est=None):
+        est = est or estilos.PADRAO
+        self.est = est
         self.blocos, self.w, self.h = blocos, w, h
-        self.cy = h * (0.545 if kind == "short" else 0.80)
-        self.tam = int(h * (0.066 if kind == "short" else 0.105))
+        self.cy = h * (est.legenda_y if kind == "short" else 0.80)
+        self.tam = int(h * (0.066 if kind == "short" else 0.105) * est.legenda_escala)
         self.max_w = int(w * (0.88 if kind == "short" else 0.56))
         self.i = 0
         self._cache: dict = {}
+
+    def _sprite(self, i: int, b) -> Image.Image:
+        est = self.est
+        cor = BRANCO
+        if b.forte:
+            cor = est.legenda_cor_forte
+            if est.legenda_cor_alt is not None and i % 2:
+                cor = est.legenda_cor_alt
+        spr = _texto_sprite(b.texto, int(self.tam * (1.16 if b.forte else 1.0)), cor,
+                            max(6, self.tam // 9), self.max_w)
+        if est.legenda_caixa is not None:
+            pad = max(14, self.tam // 4)
+            cx = _caixa(spr.width + 2 * pad, spr.height + pad, est.legenda_caixa, max(8, pad // 2))
+            cx.alpha_composite(spr, (pad, pad // 2))
+            return cx
+        if b.forte:   # palavra forte entra levemente torta (mais "viva")
+            spr = spr.rotate(3 if i % 2 else -3, expand=True, resample=Image.BICUBIC)
+        return spr
 
     def desenhar(self, frame: Image.Image, t: float) -> None:
         while self.i + 1 < len(self.blocos) and t >= self.blocos[self.i + 1].t0:
@@ -667,14 +698,10 @@ class Legendas:
         if not (b.t0 <= t < b.t1):
             return
         if self.i not in self._cache:
-            spr = _texto_sprite(
-                b.texto, int(self.tam * (1.16 if b.forte else 1.0)), AMARELO if b.forte else BRANCO,
-                max(6, self.tam // 9), self.max_w)
-            if b.forte:   # palavra forte entra levemente torta (mais "viva")
-                spr = spr.rotate(3 if self.i % 2 else -3, expand=True, resample=Image.BICUBIC)
-            self._cache = {self.i: spr}
+            self._cache = {self.i: self._sprite(self.i, b)}
         idade = t - b.t0
-        escala = 0.62 + 0.38 * _ease_back(idade / 0.13) if idade < 0.13 else 1.0
+        base = 0.50 if self.est.ritmo == "turbo" else 0.62
+        escala = base + (1 - base) * _ease_back(idade / 0.13) if idade < 0.13 else 1.0
         _colar(frame, self._cache[self.i], self.w / 2, self.cy, escala)
 
 
@@ -895,19 +922,151 @@ class Mascote:
         frame.paste(spr, (int(x - spr.width / 2), int(self.chao - pe + quique)), spr)
 
 
+# ------------------------------------------------------------------ estilos (atualizacao 2.0)
+
+def _lut_grade(grade: str) -> list | None:
+    """Tabela de cor (768 valores: R, G, B) por tipo de filtro."""
+    if grade in ("normal", "pb"):
+        return None
+    r, g, b = [], [], []
+    for v in range(256):
+        x = v / 255.0
+        if grade == "quente":
+            base = 255 * (x * 1.03 - 0.015)
+            r.append(base * 1.07 + 6); g.append(base * 1.0 + 2); b.append(base * 0.86)
+        elif grade == "neon":
+            c = 255 * (0.5 + (x - 0.5) * 1.22)           # mais contraste
+            r.append(c * 0.96 + 26 * (1 - x)); g.append(c * 0.86); b.append(c * 1.10 + 40 * (1 - x))
+        else:   # vhs: preto levantado + tom frio esverdeado
+            base = 16 + v * 0.90
+            r.append(base * 0.92); g.append(base * 1.0); b.append(base * 1.04)
+    clamp = lambda xs: [min(255, max(0, int(round(a)))) for a in xs]
+    return clamp(r) + clamp(g) + clamp(b)
+
+
+class Pos:
+    """Efeitos de pos-producao do estilo escolhido: filtro de cor, vinheta,
+    VHS (grao, linhas, falha de rastreio), glitch RGB e a faixa de texto."""
+
+    def __init__(self, kind: str, w: int, h: int, est, titulo: str, rng: random.Random, topo: int):
+        self.est, self.kind, self.w, self.h = est, kind, w, h
+        self.u = (w if kind == "short" else h) / 1080
+        self.rng = rng
+        self.lut = _lut_grade(est.grade)
+        self.pb = est.grade == "pb"
+        self.vinheta = None
+        if est.vinheta > 0:
+            ys, xs = np.mgrid[0:h:8, 0:w:8]
+            d = np.sqrt(((xs - w / 2) / (w / 2)) ** 2 + ((ys - h / 2) / (h / 2)) ** 2)
+            alfa = np.clip((d - 0.55) / 0.9, 0, 1) ** 1.6 * 255 * est.vinheta
+            self.vinheta = Image.fromarray(alfa.astype(np.uint8), "L").resize((w, h), Image.BILINEAR)
+            self.preto = Image.new("RGB", (w, h), (0, 0, 0))
+        self.vhs = est.grade == "vhs"
+        if self.vhs:
+            gerador = np.random.default_rng(7)
+            self.ruidos = []
+            for _ in range(4):
+                n = gerador.normal(128, 46, (h // 3, w // 3)).clip(0, 255).astype(np.uint8)
+                self.ruidos.append(Image.fromarray(n, "L").resize((w, h), Image.NEAREST).convert("RGB"))
+            linhas = np.zeros((h, 1), dtype=np.uint8)
+            linhas[::4] = 46
+            self.linhas = Image.fromarray(np.repeat(linhas, 8, axis=1), "L").resize((w, h), Image.NEAREST)
+            self.preto = Image.new("RGB", (w, h), (0, 0, 0))
+        # faixa de texto (VAZAMENTO / URGENTE)
+        u = self.u
+        self.y_faixa = topo + int(135 * u) if est.hud != "nenhum" else topo
+        self.faixa_h = int(64 * u)
+        self.faixa_img = None
+        self.ticker_img = None
+        if est.faixa:
+            txt = _texto_sprite(est.faixa, int(40 * u), BRANCO, 0, sombra=False)
+            larg_chip = txt.width + int(70 * u)
+            self.chip_faixa = _caixa(larg_chip, self.faixa_h, est.faixa_cor + (255,), int(8 * u))
+            self.chip_faixa.alpha_composite(txt, (int(52 * u), (self.faixa_h - txt.height) // 2))
+            self.larg_chip = larg_chip
+            if est.ticker:
+                texto = ("  |  ".join([_limpa(titulo).upper()] * 3)) + "  |  "
+                spr = _texto_sprite(texto, int(40 * u), BRANCO, 0, sombra=False)
+                self.ticker_img = spr
+        self._cache_rec: dict = {}
+
+    # ---- antes dos overlays (age no fundo)
+    def base(self, frame: Image.Image, t: float, n_plano: int, forte: bool) -> Image.Image:
+        est = self.est
+        if est.glitch and forte and n_plano < 4:
+            desl = int((14 - 3 * n_plano) * self.u)
+            r, g, b = frame.split()
+            r = ImageChops.offset(r, desl, 0)
+            b = ImageChops.offset(b, -desl, int(desl * 0.3))
+            frame = Image.merge("RGB", (r, g, b))
+        if self.pb:
+            frame = frame.convert("L").convert("RGB")
+        elif self.lut is not None:
+            frame = frame.point(self.lut)
+        if self.vhs:
+            frame = Image.blend(frame, frame.convert("L").convert("RGB"), 0.30)
+            frame = Image.blend(frame, self.ruidos[int(t * 12) % 4], 0.10)
+            frame.paste(self.preto, (0, 0), self.linhas)
+            k = int(t * FPS)
+            if k % 53 < 4:   # falha de rastreio: uma faixa de linhas escorrega de lado
+                y0 = (k * 97) % max(1, self.h - 260)
+                faixa = frame.crop((0, y0, self.w, y0 + int(110 * self.u)))
+                frame.paste(faixa, (int((10 + (k % 5) * 9) * self.u), y0))
+        if self.vinheta is not None:
+            frame.paste(self.preto, (0, 0), self.vinheta)
+        return frame
+
+    # ---- depois dos overlays (texto nítido por cima)
+    def topo(self, frame: Image.Image, t: float) -> None:
+        est, u = self.est, self.u
+        if not est.faixa:
+            return
+        y = self.y_faixa
+        d = ImageDraw.Draw(frame)
+        if est.ticker and self.ticker_img is not None:
+            d.rectangle([0, y, self.w, y + self.faixa_h], fill=(16, 18, 34))
+            larg = self.ticker_img.width
+            desloc = int(t * 230 * u) % max(1, larg // 3)
+            x0 = self.larg_chip - desloc
+            area = Image.new("RGBA", (self.w, self.faixa_h), (0, 0, 0, 0))
+            area.alpha_composite(self.ticker_img, (x0, (self.faixa_h - self.ticker_img.height) // 2))
+            frame.paste(area, (0, y), area)
+            frame.paste(self.chip_faixa, (0, y), self.chip_faixa)
+        else:
+            d.rectangle([0, y, self.w, y + self.faixa_h], fill=est.faixa_cor)
+            if int(t * 2) % 2 == 0:
+                d.ellipse([int(26 * u), y + self.faixa_h // 2 - int(10 * u),
+                           int(46 * u), y + self.faixa_h // 2 + int(10 * u)], fill=BRANCO)
+            frame.paste(self.chip_faixa, (int(40 * u), y), self.chip_faixa)
+            sub = _texto_sprite("A ROCKSTAR NAO CONFIRMOU", int(30 * u), BRANCO, 0, sombra=False)
+            frame.paste(sub, (self.w - sub.width - int(30 * u), y + (self.faixa_h - sub.height) // 2), sub)
+        if self.vhs:
+            seg = int(t)
+            txt = f"REC  00:{seg // 60 % 60:02d}:{seg % 60:02d}"
+            if txt not in self._cache_rec:
+                self._cache_rec = {txt: _texto_sprite(txt, int(34 * u), (240, 240, 240), 2, sombra=False)}
+            spr = self._cache_rec[txt]
+            frame.paste(spr, (int(34 * u), y + self.faixa_h + int(14 * u)), spr)
+
+
 # ------------------------------------------------------------------ render
 
-def _render_motion(kind: str, titulo: str, segments: list, out_path: Path) -> Path:
+def _render_motion(kind: str, titulo: str, segments: list, out_path: Path, estilo: str | None = None) -> Path:
     w, h = RESOLUTIONS[kind]
+    est = estilos.obter(estilo)
+    if estilo is None:
+        est = dataclasses.replace(est, corte_max=CORTE_MAX, plano_max=PLANO_MAX)
+    fator = 1.0 if kind == 'short' else 1.35
+    corte_max, plano_max = min(est.corte_max * fator, 2.9), min(est.plano_max * fator, 3.3)
     rng = random.Random(sum(ord(c) for c in titulo) + len(segments))
 
     falas, narracao = _montar_falas(segments)
     cauda = int(0.35 * SR)
     total_amostras = narracao.size + cauda
     total = total_amostras / SR
-    blocos = _montar_blocos(falas)
-    carimbos_lista = _montar_carimbos(falas, Titulo.DUR + 0.2)
-    planos = _montar_planos(falas, total)
+    blocos = _montar_blocos(falas, agrupar=not est.legenda_palavra_a_palavra)
+    carimbos_lista = _montar_carimbos(falas, Titulo.DUR + 0.2) if est.carimbos else []
+    planos = _montar_planos(falas, total, corte_max, plano_max)
 
     # --- áudio: narração + efeitos + trilha
     mix = np.zeros(total_amostras, dtype=np.float32)
@@ -915,7 +1074,7 @@ def _render_motion(kind: str, titulo: str, segments: list, out_path: Path) -> Pa
     whoosh, impacto, pop = _whoosh(), _impacto(), _pop()
     for k, plano in enumerate(p for p in planos if p.forte):
         if k % 2 == 0:
-            _somar(mix, whoosh, max(0.0, plano.t0 - 0.12), 0.16)
+            _somar(mix, whoosh, max(0.0, plano.t0 - 0.12), 0.16 if est.ritmo != 'lento' else 0.07)
     for c in carimbos_lista:
         _somar(mix, impacto, c.t0 + 0.10, 0.55)
     cta_t0 = next((f.t0 for f in falas if f.cta), None)
@@ -924,7 +1083,7 @@ def _render_motion(kind: str, titulo: str, segments: list, out_path: Path) -> Pa
         _somar(mix, pop, cta_t0 + 1.17, 0.45)
     trilha = _musica(total_amostras)
     if trilha is not None:
-        mix += trilha * MUSICA_VOLUME
+        mix += trilha * est.musica
     mix = np.clip(mix, -1.0, 1.0)
 
     tmp = config.ASSETS_DIR / "tmp" / "motion"
@@ -938,12 +1097,13 @@ def _render_motion(kind: str, titulo: str, segments: list, out_path: Path) -> Pa
 
     # --- elementos visuais
     fundo = Fundo(kind, w, h, planos, rng)
-    hud = Hud(kind, w, h, falas)
-    legendas = Legendas(kind, w, h, blocos)
+    hud = Hud(kind, w, h, falas, est.hud)
+    legendas = Legendas(kind, w, h, blocos, est)
     carimbos = Carimbos(kind, w, h, carimbos_lista, rng)
-    cartao = Titulo(kind, w, h, titulo)
+    cartao = Titulo(kind, w, h, titulo) if est.cartao_titulo else None
     botao = BotaoCta(kind, w, h, falas)
-    mascote = Mascote(kind, w, h, falas, blocos, carimbos, cta_t0)
+    mascote = Mascote(kind, w, h, falas, blocos, carimbos, cta_t0) if est.mascote else None
+    pos = Pos(kind, w, h, est, titulo, rng, hud.topo)
     degrade_baixo = _degrade(w, int(h * 0.50), True, 190)
     degrade_topo = _degrade(w, int(h * 0.24), False, 150)
     branco = Image.new("RGB", (w, h), (255, 255, 255))
@@ -959,14 +1119,18 @@ def _render_motion(kind: str, titulo: str, segments: list, out_path: Path) -> Pa
         stdin=subprocess.PIPE,
     )
     n_frames = int(math.ceil(total * FPS))
-    print(f"[render] motion: {kind} {w}x{h}, {total:.1f}s, {n_frames} quadros, {len(planos)} cortes, "
+    print(f"[render] estilo={est.nome} motion: {kind} {w}x{h}, {total:.1f}s, {n_frames} quadros, {len(planos)} cortes, "
           f"{len(blocos)} legendas, {len(carimbos_lista)} carimbos", flush=True)
     try:
         for n in range(n_frames):
             t = n / FPS
             frame, n_plano, forte = fundo.frame(t)
-            # soco de zoom no corte + tremida quando o carimbo bate
-            zoom = 1.0 + (0.12 * (1 - _ease_out(n_plano / 6)) if (forte and n_plano < 6) else 0.0)
+            # soco de zoom no corte + empurrao lento + tremida quando o carimbo bate
+            zoom = 1.0
+            if forte and n_plano < 6 and est.soco > 0:
+                zoom += est.soco * (1 - _ease_out(n_plano / 6))
+            if est.deriva > 0:
+                zoom += est.deriva * min(1.0, n_plano / max(1, fundo.frames_plano))
             dx, dy = carimbos.tremor(t)
             if zoom > 1.001 or dx or dy:
                 m = 14 if (dx or dy) else 0
@@ -974,16 +1138,20 @@ def _render_motion(kind: str, titulo: str, segments: list, out_path: Path) -> Pa
                 bx, by = (w - cw) / 2 + dx, (h - ch) / 2 + dy
                 bx, by = min(max(bx, 0.0), w - cw), min(max(by, 0.0), h - ch)
                 frame = frame.resize((w, h), Image.BILINEAR, box=(bx, by, bx + cw, by + ch))
-            if forte and n_plano < 3:
-                frame = Image.blend(frame, branco, (0.30, 0.16, 0.07)[n_plano])
+            if forte and n_plano < 3 and est.flash > 0:
+                frame = Image.blend(frame, branco, min(0.6, (0.30, 0.16, 0.07)[n_plano] * est.flash))
+            frame = pos.base(frame, t, n_plano, forte)
             frame.paste(degrade_baixo, (0, h - degrade_baixo.height), degrade_baixo)
             frame.paste(degrade_topo, (0, 0), degrade_topo)
-            mascote.desenhar(frame, t)
+            if mascote is not None:
+                mascote.desenhar(frame, t)
             carimbos.desenhar(frame, t)
             botao.desenhar(frame, t)
-            cartao.desenhar(frame, t)
+            if cartao is not None:
+                cartao.desenhar(frame, t)
             legendas.desenhar(frame, t)
             hud.desenhar(frame, t)
+            pos.topo(frame, t)
             if kind == "long":   # barra de progresso (no short o app já mostra a dele)
                 ImageDraw.Draw(frame).rectangle([0, 0, int(w * t / total), int(h * 0.008)], fill=AMARELO)
             enc.stdin.write(frame.tobytes())
@@ -1001,12 +1169,12 @@ def _render_motion(kind: str, titulo: str, segments: list, out_path: Path) -> Pa
 ULTIMO_MOTOR = "?"
 
 
-def render_video(kind: str, titulo: str, segments: list, out_path: Path) -> Path:
+def render_video(kind: str, titulo: str, segments: list, out_path: Path, estilo: str | None = None) -> Path:
     global ULTIMO_MOTOR
     if not segments:
         raise ValueError("Nenhum segmento de narração pra montar o vídeo.")
     try:
-        saida = _render_motion(kind, titulo, segments, out_path)
+        saida = _render_motion(kind, titulo, segments, out_path, estilo)
         ULTIMO_MOTOR = "motion"
         return saida
     except Exception:
