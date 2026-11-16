@@ -33,6 +33,10 @@ def _ligar_radar() -> None:
     except Exception as exc:
         print(f"[generate] radar indisponivel ({exc!r}) - seguindo so com os fatos oficiais.")
         return
+    try:
+        script_generator.NOTICIAS_VAZAMENTO = radar.buscar_vazamentos()
+    except Exception as exc:
+        print(f"[generate] vazamentos indisponiveis ({exc!r}) - uso so o contexto historico.")
     if not noticias:
         return
     original = script_generator._load_knowledge_base
