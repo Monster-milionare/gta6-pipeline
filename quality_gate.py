@@ -40,6 +40,12 @@ RED_FLAGS = [
     "ainda não confirmado, mas",
 ]
 
+# Em shorts de VAZAMENTO (item_id "vazamento-...") estas palavras sao permitidas,
+# porque o roteiro TEM que falar do rumor - mas so com a ressalva de "nao confirmado".
+RED_FLAGS_VAZAMENTO = ["vazamento exclusivo", "fonte anonima", "fonte anônima", "ouvi dizer", "dizem que"]
+RESSALVA_VAZAMENTO = ("nao confirm", "não confirm", "sem confirma", "nao e oficial", "não é oficial",
+                      "nao foi confirmad", "não foi confirmad")
+
 MIN_LONG_WORDS, MAX_LONG_WORDS = 1100, 2200
 MIN_SHORT_WORDS, MAX_SHORT_WORDS = 60, 200
 
@@ -99,7 +105,10 @@ def avaliar_lote(batch: DailyBatch) -> tuple[list[str], list[str]]:
             )
 
         texto_lower = item.roteiro.lower()
-        for flag in RED_FLAGS:
+        eh_vazamento = item.item_id.startswith("vazamento-")
+        if eh_vazamento and not any(r in texto_lower for r in RESSALVA_VAZAMENTO):
+            problemas.append(f"{item.item_id}: vazamento sem a ressalva de 'nao confirmado'.")
+        for flag in (RED_FLAGS_VAZAMENTO if eh_vazamento else RED_FLAGS):
             if flag in texto_lower:
                 bloqueantes.append(
                     f"{item.item_id}: contem expressao de claim nao verificavel "
