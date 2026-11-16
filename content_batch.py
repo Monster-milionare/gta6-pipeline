@@ -16,6 +16,8 @@ class ContentItem:
     titulo: str
     roteiro: str
     publicado: bool = False
+    estilo: str = ""   # estilo de edicao (estilos.py) - vazio = padrao
+    pegada: str = ""   # jeito de contar o roteiro (estilos.py)
 
 
 @dataclass
@@ -32,6 +34,10 @@ def render_markdown(batch: DailyBatch) -> str:
         lines.append(f"## {label} - {item.item_id}")
         lines.append(f"Titulo: {item.titulo}")
         lines.append(f"Publicado: {'sim' if item.publicado else 'nao'}")
+        if item.estilo:
+            lines.append(f"Estilo: {item.estilo}")
+        if item.pegada:
+            lines.append(f"Pegada: {item.pegada}")
         lines.append("Roteiro:")
         lines.append("```")
         lines.append(item.roteiro.strip())
@@ -45,6 +51,8 @@ _ITEM_RE = re.compile(
     r"^##\s*(LONGO|SHORT[^-]*)\s*-\s*(?P<id>\S+)\s*\n"
     r"Titulo:\s*(?P<titulo>[^\n]*)\n"
     r"Publicado:\s*(?P<publicado>sim|nao)\s*\n"
+    r"(?:Estilo:\s*(?P<estilo>[^\n]*)\n)?"
+    r"(?:Pegada:\s*(?P<pegada>[^\n]*)\n)?"
     r"Roteiro:\s*\n```\n(?P<roteiro>.*?)\n```",
     re.MULTILINE | re.DOTALL,
 )
@@ -65,6 +73,8 @@ def parse_markdown(text: str, date: str) -> DailyBatch:
                 titulo=m.group("titulo").strip(),
                 roteiro=m.group("roteiro").strip(),
                 publicado=(m.group("publicado") == "sim"),
+                estilo=(m.group("estilo") or "").strip(),
+                pegada=(m.group("pegada") or "").strip(),
             )
         )
     return DailyBatch(date=date, status=status, items=items)
