@@ -38,6 +38,7 @@ from pathlib import Path
 from zoneinfo import ZoneInfo
 
 import config
+import estilos
 import render as _render_mod
 import unicidade
 from content_batch import load_batch, mark_item_published
@@ -82,9 +83,15 @@ CTA_FRASES = [
 ]
 
 
+CTA_VAZAMENTO = ("Quer saber o que a Rockstar realmente confirmar? Se inscreve no canal: "
+                 "aqui rumor e rumor, e fato e fato.")
+
+
 def _cta_frase(item) -> str:
     if item.item_id.startswith("teoria-"):
         return CTA_TEORIA
+    if item.item_id.startswith("vazamento-"):
+        return CTA_VAZAMENTO
     idx = sum(ord(c) for c in item.item_id) % len(CTA_FRASES)
     return CTA_FRASES[idx]
 
@@ -115,8 +122,10 @@ def _set_thumbnail_seguro(video_id: str, thumb_path: Path) -> None:
 
 
 def _description(item) -> str:
+    aviso = ("ATENCAO: este video fala de um RELATO/RUMOR NAO CONFIRMADO pela Rockstar Games. "
+             "Nada aqui e oficial.\n\n") if item.item_id.startswith("vazamento-") else ""
     return (
-        f"{item.titulo}\n\n"
+        f"{item.titulo}\n\n{aviso}"
         f"Conteúdo baseado em material oficial da Rockstar Games/Take-Two "
         f"Interactive sobre GTA VI. Lançamento: 19/11/2026.\n"
         f"#GTA6 #GTAVI #RockstarGames"
@@ -190,6 +199,9 @@ def _salvar_status_git(item_id: str) -> None:
         _git("config", "user.name", "gta6-pipeline-bot")
         _git("config", "user.email", "actions@users.noreply.github.com")
         _git("add", "review/")
+        for f in ("state/videos.json", "state/pesos.json"):
+            if Path(f).exists():
+                _git("add", "-f", f)
         if _git("diff", "--cached", "--quiet") == 0:
             return
         _git("commit", "-m", f"chore: {item_id} publicado")
@@ -215,12 +227,15 @@ def _process_item(batch, item, date_str: str, review_path: Path, ultimo: datetim
     segments = segments + cta_segments
 
     video_path = config.ASSETS_DIR / "tmp" / f"{item.item_id}.mp4"
-    # Corte mais rapido nos shorts (mais cortes por segundo = mais retencao).
-    if item.kind == "short":
-        _render_mod.CORTE_MAX, _render_mod.PLANO_MAX = 1.8, 2.3
-    else:
-        _render_mod.CORTE_MAX, _render_mod.PLANO_MAX = 2.6, 3.3
-    render_video(item.kind, item.titulo, segments, video_path)
+    # Atualizacao 2.0: o ritmo de corte vem do estilo do item (rotativo). Lotes
+    # antigos, sem "Estilo:", ganham um estilo sorteado de forma estavel pelo id.
+    if not item.estilo:
+        try:
+            item.estilo = estilos.planejar_dia([(item.item_id, item.kind)], item.item_id)[0][0]
+        except Exception:
+            item.estilo = "padrao"
+    print(f"[publish] estilo de edicao: {item.estilo} | pegada: {item.pegada or '-'}", flush=True)
+    render_video(item.kind, item.titulo, segments, video_path, item.estilo)
 
     thumb_path = _gerar_thumbnail_seguro(item)
 
@@ -229,7 +244,7 @@ def _process_item(batch, item, date_str: str, review_path: Path, ultimo: datetim
         video_path=video_path,
         title=item.titulo,
         description=_description(item),
-        tags=["GTA VI", "GTA 6", "Rockstar Games"],
+        tags=["GTA VI", "GTA 6", "Rockstar Games"] + (["GTA 6 vazamento", "GTA 6 rumor"] if item.item_id.startswith("vazamento-") else []),
         is_short=(item.kind == "short"),
     )
     video_id = None
@@ -252,6 +267,7 @@ def _process_item(batch, item, date_str: str, review_path: Path, ultimo: datetim
         _set_thumbnail_seguro(video_id, thumb_path)
 
     mark_item_published(review_path, date_str, item.item_id)
+    estilos.registrar_video(item, video_id, (quando or datetime.now(FUSO)).isoformat())
     _salvar_status_git(item.item_id)
     print(f"[publish] {item.item_id} -> https://youtu.be/{video_id}", flush=True)
     return quando
