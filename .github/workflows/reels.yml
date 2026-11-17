@@ -5,7 +5,7 @@ on:
     # Minutos "quebrados" (o cron do GitHub atrasa muito em :00). Duas
     # execucoes por dia; se uma atrasar ou falhar, a outra cobre (o alvo
     # da segunda e o dia inteiro e o que ja foi postado nunca repete).
-    - cron: "19 14 * * *"   # ~11:19 Brasilia  (alvo: 3 extras)
+    - cron: "19 14 * * *"   # ~11:19 Brasilia  (alvo: 1 extra)
     - cron: "41 22 * * *"   # ~19:41 Brasilia  (alvo: todos os extras)
   workflow_dispatch:
     inputs:
@@ -86,13 +86,13 @@ jobs:
           EXTRAS_IN: ${{ github.event.inputs.extras }}
           LOTE_IN: ${{ github.event.inputs.lote }}
         run: |
-          EXTRAS="${EXTRAS_IN:-5}"
+          EXTRAS="${EXTRAS_IN:-2}"
           if [ -n "$EXTRAS_IN" ]; then
             ALVO="$EXTRAS"
             LOTE="$LOTE_IN"
           else
-            # execucao agendada: manha = 3 extras, tarde/noite = todos; sempre confere o lote
-            if [ "$(date +%H)" -lt 15 ]; then ALVO=3; else ALVO="$EXTRAS"; fi
+            # execucao agendada: manha = 1 extra, tarde/noite = todos; sempre confere o lote
+            if [ "$(date +%H)" -lt 15 ]; then ALVO=1; else ALVO="$EXTRAS"; fi
             LOTE="true"
           fi
           ARGS="--extras $EXTRAS --alvo $ALVO"
