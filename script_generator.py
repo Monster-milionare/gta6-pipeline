@@ -33,7 +33,7 @@ Regras rígidas:
    mesmo lote — nada de repetir a mesma estrutura "Top 5 curiosidades"
    em todos. Varie formato: pergunta, comparação, contagem regressiva,
    reação a um detalhe específico, contexto histórico da franquia etc.
-4. Roteiro do vídeo longo: 1300-1900 palavras (dá ~8-12 min falado).
+4. Roteiro do vídeo longo: 1000-1400 palavras (dá ~7-9 min falado, denso: cada bloco entrega um fato novo, sem enrolação).
 5. Roteiro de cada short: 80-150 palavras (30-60s falado).
 6. Escreva em frases curtas e diretas (facilita a narração em TTS e a
    sincronização de legenda frase a frase).
@@ -66,7 +66,7 @@ Regras rígidas:
 14. A primeira frase do short quebra o padrao em ate 10 palavras, sem
     cumprimento e sem apresentacao. A ULTIMA frase fecha o loop voltando para o
     gancho da primeira (isso faz a pessoa rever o video e sobe a retencao).
-15. SOMENTE em shorts (o roteiro longo NAO muda e segue a regra 4, com 1300-1900
+15. SOMENTE em shorts (o roteiro longo NAO muda e segue a regra 4, com 1000-1400
     palavras): um unico assunto, promessa clara no inicio, 75-105 palavras,
     frases de 4 a 9 palavras, uma virada de ritmo a cada duas frases (o editor
     troca de plano a cada frase, entao cada frase precisa ser uma imagem/ideia
@@ -96,8 +96,7 @@ def _load_knowledge_base() -> str:
 # quando a cota do YouTube (ver publish.py) nao cobre todos os envios do dia.
 N_SHORTS_NORMAIS = 6
 N_TEORIAS = 2
-ORDEM_DO_DIA = ["long", "short", "vazamento", "short", "teoria", "vazamento",
-                "short", "short", "teoria"]
+ORDEM_DO_DIA = ["short", "long"]   # Atualizacao 3.0: so 2 por dia, cada um caprichado
 
 def limite_uploads() -> int:
     """Quantos envios por dia a cota gratis do YouTube aguenta (cada upload
@@ -107,7 +106,7 @@ def limite_uploads() -> int:
     try:
         return max(1, min(len(ORDEM_DO_DIA), int((config.BASE_DIR / "limite_uploads.txt").read_text().strip())))
     except Exception:
-        return 6
+        return 2
 
 
 # Modelos de reserva: se o principal falhar em gerar JSON valido (erro 400
@@ -122,15 +121,12 @@ ANGULOS = [
     "verdade ou mito: desmonte uma duvida comum usando so fatos confirmados",
     "3 coisas para fazer ANTES do lancamento (pre-carga, espaco no disco, conta): lista curta de 3",
     "faltam X dias: o que ja e oficial a poucos dias do lancamento (use o numero exato de dias)",
-    "Jason e Lucia: um detalhe da relacao ou personalidade mostrado nos trailers (so o confirmado)",
     "um lugar de Leonida mostrado nos trailers e o que ele lembra da vida real (so o confirmado)",
     "erro comum que o fa comete antes do lancamento (pre-carga, edicao, preco), explicado so com fatos oficiais",
     "comparacao direta GTA V vs GTA VI usando so numeros e fatos oficiais",
     "a pergunta que todo mundo faz e a resposta oficial em 30 segundos",
     "A ou B: duas opcoes e pedido de voto nos comentarios (plataforma, personagem, cidade)",
-    "o detalhe do trailer que quase ninguem notou (so se estiver nos fatos confirmados)",
     "o que a Rockstar ainda NAO disse oficialmente e por que isso importa",
-    "numeros e recordes do marketing, so os confirmados",
 ]
 
 
@@ -232,7 +228,7 @@ def _gerar_um(client, kind: str, fatos: str, proibidos: list, angulo: str, motiv
               tipo: str = "", pegada: str = "", relato: dict | None = None, historico_idx: int = 0):
     """Pede UM roteiro (cada item em sua propria chamada: respostas curtas
     quase nunca quebram o JSON, e cada uma ja nasce sabendo o que e proibido)."""
-    alvo = ("1 roteiro de video longo de 1500 a 1900 palavras (abaixo de 1300 sera recusado: desenvolva cada bloco com detalhes confirmados)" if kind == "long"
+    alvo = ("1 roteiro de video longo de 1100 a 1400 palavras (abaixo de 1000 sera recusado; denso e sem enrolacao: cada bloco entrega um fato confirmado novo e termina com um gancho para o proximo)" if kind == "long"
             else "1 roteiro de short (80-150 palavras)")
     if tipo == "teoria":
         alvo = (
@@ -318,7 +314,7 @@ def generate_daily_content(date_str: str | None = None) -> DailyBatch:
         plano = estilos.planejar_dia([(i, k) for (k, i, _t) in vagas], date_str)
     except Exception as exc:
         print(f"[generate] aviso: planejamento de estilos falhou ({exc!r}) - usando padrao.")
-        plano = [("padrao", estilos.PEGADA_PADRAO)] * len(vagas)
+        plano = [("neon", estilos.PEGADA_PADRAO)] * len(vagas)
     deslocamento = date_cls.fromisoformat(date_str).toordinal()
 
     itens, aceitos, descartados = [], [], []
@@ -364,3 +360,20 @@ def generate_daily_content(date_str: str | None = None) -> DailyBatch:
     batch = DailyBatch(date=date_str, status="PENDENTE", items=itens)
     batch.descartados = descartados  # so informativo (generate.py anota no arquivo)
     return batch
+
+
+# --- Atualizacao 3.0 (reformulacao) ---------------------------------------
+# Regras extras injetadas no prompt do sistema: o canal tem poucas views, entao
+# cada um dos 2 videos do dia precisa ser memoravel e 100% verificavel.
+SYSTEM_PROMPT += """
+19. QUALIDADE ACIMA DE VOLUME (so saem 2 videos por dia). Cada roteiro precisa de:
+    (a) um GANCHO que gere curiosidade ou urgencia real nos primeiros 2 segundos,
+    ligado ao lancamento de GTA VI em 19/11/2026 (a maior janela de busca do ano);
+    (b) um fato confirmado NOVO a cada duas frases (nada de repetir ideia com outras
+    palavras, nada de enrolacao);
+    (c) PROIBIDO prometer "detalhe que ninguem viu", "segredo", "revelado" ou "o que
+    a Rockstar escondeu" a menos que o fato esteja em <fatos_confirmados> com o
+    detalhe exato. Prometeu, entregou. Sem isso o video vira clickbait e e recusado.
+    (d) final que fecha o loop com a primeira frase e pede um voto de ESCOLHA nos
+    comentarios.
+"""

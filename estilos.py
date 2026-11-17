@@ -61,7 +61,7 @@ class Estilo:
 
 ESTILOS: dict = {e.nome: e for e in [
     Estilo("padrao", "O visual que o canal ja tinha: HUD, mascote, carimbos, corte medio.",
-           "medio", 1.9, 2.4, 0.12, 1.0),
+           "medio", 1.9, 2.4, 0.12, 1.0, tipos=()),   # aposentado na 3.0: nunca mais sorteado
     Estilo("turbo", "Cortes de ~1s, soco de zoom forte, glitch RGB, 1 palavra por vez, tudo em movimento.",
            "turbo", 1.05, 1.4, 0.20, 1.4, glitch=True, deriva=0.05, legenda_y=0.50,
            legenda_escala=1.25, legenda_palavra_a_palavra=True, musica=0.14,

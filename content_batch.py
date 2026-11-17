@@ -1,8 +1,8 @@
 """
-Representacao do 'lote do dia' (1 video longo + N shorts) como um arquivo
-Markdown unico, legivel e editavel a mao - e esse arquivo que voce abre,
-edita e aprova uma vez por dia. publish.py rele esse mesmo arquivo, entao
-qualquer edicao sua e sempre respeitada.
+Representação do 'lote do dia' (1 vídeo longo + N shorts) como um arquivo
+Markdown único, legível e editável à mão — é esse arquivo que você abre,
+edita e aprova uma vez por dia. publish.py relê esse mesmo arquivo, então
+qualquer edição sua é sempre respeitada.
 """
 import re
 from dataclasses import dataclass, field
@@ -28,10 +28,10 @@ class DailyBatch:
 
 
 def render_markdown(batch: DailyBatch) -> str:
-    lines = [f"# Lote do dia - {batch.date}", f"Status: {batch.status}", ""]
+    lines = [f"# Lote do dia — {batch.date}", f"Status: {batch.status}", ""]
     for item in batch.items:
         label = "LONGO" if item.kind == "long" else "SHORT"
-        lines.append(f"## {label} - {item.item_id}")
+        lines.append(f"## {label} — {item.item_id}")
         lines.append(f"Titulo: {item.titulo}")
         lines.append(f"Publicado: {'sim' if item.publicado else 'nao'}")
         if item.estilo:
@@ -48,7 +48,7 @@ def render_markdown(batch: DailyBatch) -> str:
 
 _HEADER_RE = re.compile(r"^Status:\s*(\w+)", re.MULTILINE)
 _ITEM_RE = re.compile(
-    r"^##\s*(LONGO|SHORT[^-]*)\s*-\s*(?P<id>\S+)\s*\n"
+    r"^##\s*(LONGO|SHORT[^—-]*)\s*[—-]\s*(?P<id>\S+)\s*\n"
     r"Titulo:\s*(?P<titulo>[^\n]*)\n"
     r"Publicado:\s*(?P<publicado>sim|nao)\s*\n"
     r"(?:Estilo:\s*(?P<estilo>[^\n]*)\n)?"
@@ -97,10 +97,16 @@ def mark_item_published(path: Path, date: str, item_id: str) -> None:
 
 
 def next_unpublished(batch: DailyBatch):
-    """Retorna o proximo item aprovado ainda nao publicado, ou None."""
+    """Retorna o próximo item aprovado ainda não publicado, ou None."""
     if batch.status != "APROVADO":
         return None
-    for item in batch.items:
+    # Atualizacao 3.0: so os N primeiros itens do lote (limite_uploads.txt) sao elegiveis,
+    # mesmo que um lote antigo traga mais; assim o canal nunca passa de 2 posts por dia.
+    try:
+        n = int((Path(__file__).resolve().parent / "limite_uploads.txt").read_text().strip())
+    except Exception:
+        n = 2
+    for item in batch.items[:n]:
         if not item.publicado:
             return item
     return None

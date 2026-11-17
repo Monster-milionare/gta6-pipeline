@@ -62,8 +62,8 @@ _thumb_bloqueada = False   # canal sem verificacao por telefone: 403 em toda thu
 
 # Horários-alvo de publicação (Brasília). Longo perto do almoço, shorts
 # espalhados do almoço até a noite (picos de uso de celular no Brasil).
-SLOT_LONGO = "11:40"
-SLOTS_SHORTS = ["08:50", "10:20", "12:20", "14:10", "16:00", "17:40", "19:20", "20:50"]
+SLOT_LONGO = "19:00"   # pico de noite no Brasil
+SLOTS_SHORTS = ["12:20", "10:20", "08:50", "14:10", "16:00", "17:40", "19:20", "20:50"]
 # Distância mínima entre dois vídeos indo ao ar (quando os horários-alvo
 # já passaram e a execução está "correndo atrás").
 GAP_MIN = 25
@@ -233,7 +233,7 @@ def _process_item(batch, item, date_str: str, review_path: Path, ultimo: datetim
         try:
             item.estilo = estilos.planejar_dia([(item.item_id, item.kind)], item.item_id)[0][0]
         except Exception:
-            item.estilo = "padrao"
+            item.estilo = "neon"
     print(f"[publish] estilo de edicao: {item.estilo} | pegada: {item.pegada or '-'}", flush=True)
     render_video(item.kind, item.titulo, segments, video_path, item.estilo)
 
@@ -286,7 +286,11 @@ def main() -> int:
         print(f"[publish] lote de {date_str} não está aprovado (trava de qualidade) - nada a publicar.")
         return 0
 
-    pendentes = [i for i in batch.items if not i.publicado]
+    try:
+        _lim = int((config.BASE_DIR / "limite_uploads.txt").read_text().strip())
+    except Exception:
+        _lim = 2
+    pendentes = [i for i in batch.items[:_lim] if not i.publicado]   # Atualizacao 3.0: teto diario
     if not pendentes:
         print(f"[publish] nada pendente em {date_str} — todo o lote já foi publicado.")
         return 0

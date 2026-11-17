@@ -4,21 +4,13 @@ conjunto de checagens programaticas, pra reduzir o risco do padrao que o
 sistema anti-spam do YouTube (S-CTS) usa pra agrupar/banir canais em
 massa: alta frequencia nao-humana + mesmo padrao semantico repetido.
 
-Pipeline 100% autonomo (sem humano no loop, por pedido explicito do
-dono do canal): o lote do dia e SEMPRE aprovado sozinho (Status:
-APROVADO) e publish.py processa sem ninguem precisar abrir nada.
-
-A unica excecao e um BLOQUEANTE real: uma claim que parece vazamento/
-rumor nao verificavel (ver RED_FLAGS) - o mesmo tipo de coisa que
-motivou a notificacao extrajudicial da Take-Two contra outros criadores.
-Isso ainda trava o lote em PENDENTE, porque e risco legal, nao so
-qualidade de texto.
-
-Problemas "leves" (roteiro fora da faixa de palavras ideal, titulo
-parecido com um anterior, roteiros parecidos demais dentro do mesmo
-lote) NAO bloqueiam mais a aprovacao - ficam so registrados em
-"## Observacoes da trava de qualidade" no proprio review/<data>.md,
-pra quem quiser dar uma olhada depois, sem travar a publicacao.
+Se o lote de hoje passar em tudo, ele e aprovado sozinho (Status:
+APROVADO) e publish.py processa sem voce precisar abrir nada. Se
+QUALQUER checagem falhar, o lote fica PENDENTE (do jeito que já
+funcionava antes) e os problemas ficam registrados no proprio
+review/<data>.md, em "## Observacoes da trava de qualidade" - so nesse
+caso (excecao) e que vale a pena voce (ou uma checagem automatica de
+rotina) dar uma olhada.
 """
 import difflib
 import re
@@ -31,8 +23,7 @@ from content_batch import DailyBatch
 # algo fora do knowledge_base.json, mesmo com a instrucao do prompt em
 # script_generator.py. Melhor travar e avisar do que arriscar o tipo de
 # "leak falso" que motivou a notificacao da Take-Two contra outros
-# criadores (ver README). Este e o UNICO tipo de problema que ainda
-# bloqueia a aprovacao automatica (ver avaliar_lote).
+# criadores (ver README).
 RED_FLAGS = [
     "vazou", "vazamento exclusivo", "fonte anonima", "fonte anônima",
     "segundo um insider", "ouvi dizer", "dizem que",
@@ -46,7 +37,7 @@ RED_FLAGS_VAZAMENTO = ["vazamento exclusivo", "fonte anonima", "fonte anônima",
 RESSALVA_VAZAMENTO = ("nao confirm", "não confirm", "sem confirma", "nao e oficial", "não é oficial",
                       "nao foi confirmad", "não foi confirmad")
 
-MIN_LONG_WORDS, MAX_LONG_WORDS = 1100, 2200
+MIN_LONG_WORDS, MAX_LONG_WORDS = 900, 1800
 MIN_SHORT_WORDS, MAX_SHORT_WORDS = 60, 200
 
 # Acima desse limiar, dois roteiros do MESMO lote soam como "a mesma
@@ -59,11 +50,14 @@ SIMILARITY_LIMIT_LOTE = 0.62
 SIMILARITY_LIMIT_HISTORICO = 0.80
 DIAS_HISTORICO = 7
 
+
 def _wordcount(texto: str) -> int:
     return len(texto.split())
 
+
 def _similar(a: str, b: str) -> float:
     return difflib.SequenceMatcher(None, a.lower(), b.lower()).ratio()
+
 
 def _historico_titulos(data_atual: str, dias: int = DIAS_HISTORICO) -> list[str]:
     """Titulos de lotes anteriores (pra pegar repeticao entre dias, nao so
@@ -80,26 +74,20 @@ def _historico_titulos(data_atual: str, dias: int = DIAS_HISTORICO) -> list[str]
         titulos += re.findall(r"^Titulo:\s*(.+)$", texto, re.MULTILINE)
     return titulos
 
-def avaliar_lote(batch: DailyBatch) -> tuple[list[str], list[str]]:
-    """Retorna (bloqueantes, avisos).
 
-    bloqueantes: risco real (claim nao verificavel) - trava o lote em
-    PENDENTE, porque e risco legal/reputacional, nao so estetico.
-    avisos: problemas leves (tamanho de roteiro, titulo/roteiro
-    parecido) - so ficam registrados no arquivo, nao travam nada.
-    """
-    bloqueantes = []
-    avisos = []
+def avaliar_lote(batch: DailyBatch) -> list[str]:
+    """Retorna a lista de problemas encontrados (vazia = lote limpo)."""
+    problemas = []
 
     for item in batch.items:
         n = _wordcount(item.roteiro)
         if item.kind == "long" and not (MIN_LONG_WORDS <= n <= MAX_LONG_WORDS):
-            avisos.append(
+            problemas.append(
                 f"{item.item_id}: roteiro longo com {n} palavras "
                 f"(esperado {MIN_LONG_WORDS}-{MAX_LONG_WORDS})."
             )
         if item.kind == "short" and not (MIN_SHORT_WORDS <= n <= MAX_SHORT_WORDS):
-            avisos.append(
+            problemas.append(
                 f"{item.item_id}: short com {n} palavras "
                 f"(esperado {MIN_SHORT_WORDS}-{MAX_SHORT_WORDS})."
             )
@@ -107,10 +95,10 @@ def avaliar_lote(batch: DailyBatch) -> tuple[list[str], list[str]]:
         texto_lower = item.roteiro.lower()
         eh_vazamento = item.item_id.startswith("vazamento-")
         if eh_vazamento and not any(r in texto_lower for r in RESSALVA_VAZAMENTO):
-            bloqueantes.append(f"{item.item_id}: vazamento sem a ressalva de 'nao confirmado'.")
+            problemas.append(f"{item.item_id}: vazamento sem a ressalva de 'nao confirmado'.")
         for flag in (RED_FLAGS_VAZAMENTO if eh_vazamento else RED_FLAGS):
             if flag in texto_lower:
-                bloqueantes.append(
+                problemas.append(
                     f"{item.item_id}: contem expressao de claim nao verificavel "
                     f"('{flag}') - confirme que e so um fato do knowledge_base.json."
                 )
@@ -121,7 +109,7 @@ def avaliar_lote(batch: DailyBatch) -> tuple[list[str], list[str]]:
             a, b = batch.items[i], batch.items[j]
             sim = _similar(a.roteiro, b.roteiro)
             if sim >= SIMILARITY_LIMIT_LOTE:
-                avisos.append(
+                problemas.append(
                     f"{a.item_id} e {b.item_id}: roteiros {sim:.0%} similares "
                     f"(angulo repetido dentro do mesmo lote)."
                 )
@@ -131,25 +119,22 @@ def avaliar_lote(batch: DailyBatch) -> tuple[list[str], list[str]]:
     for item in batch.items:
         for titulo_antigo in historico:
             if _similar(item.titulo, titulo_antigo) >= SIMILARITY_LIMIT_HISTORICO:
-                avisos.append(
+                problemas.append(
                     f"{item.item_id}: titulo muito parecido com um ja usado "
                     f"('{titulo_antigo.strip()}')."
                 )
                 break
 
-    return bloqueantes, avisos
+    return problemas
+
 
 def auto_aprovar_ou_sinalizar(batch: DailyBatch) -> tuple[DailyBatch, list[str]]:
     """Aplica a trava de qualidade e decide o Status do lote.
 
-    Pipeline autonomo: so um BLOQUEANTE real (claim nao verificavel,
-    risco legal) deixa o lote PENDENTE. Qualquer outro problema
-    ("aviso" - tamanho de roteiro, titulo parecido) e so registrado no
-    arquivo, mas o lote sai APROVADO mesmo assim e publish.py roda sem
-    precisar de ninguem aprovar manualmente.
+    Lote limpo -> APROVADO (publish.py roda sem ninguem mexer).
+    Lote com problema -> PENDENTE (fica esperando uma revisao, igual ao
+    fluxo manual antigo - so que agora isso e a excecao, nao a regra).
     """
-    bloqueantes, avisos = avaliar_lote(batch)
-    batch.status = "PENDENTE" if bloqueantes else "APROVADO"
-    # bloqueantes primeiro (mais importante), depois avisos - tudo fica
-    # registrado no arquivo de qualquer forma, bloqueando ou nao.
-    return batch, bloqueantes + avisos
+    problemas = avaliar_lote(batch)
+    batch.status = "PENDENTE" if problemas else "APROVADO"
+    return batch, problemas
