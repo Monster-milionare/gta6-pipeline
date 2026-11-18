@@ -1,9 +1,26 @@
 {
- "estilos": {},
- "pegadas": {},
- "tipos": {},
- "amostra": 0,
- "media_views_dia": 0.0,
- "atualizado": "2026-11-17T09:09+00:00",
+ "estilos": {
+  "jornal": 0.861,
+  "cinema": 0.765,
+  "leak": 0.755,
+  "padrao": 0.7,
+  "neon": 2.001
+ },
+ "pegadas": {
+  "pergunta": 0.861,
+  "alerta": 0.765,
+  "vazamento": 0.755,
+  "detalhe": 0.7,
+  "mito": 2.001
+ },
+ "tipos": {
+  "long": 0.861,
+  "short": 0.599,
+  "vazamento": 0.755,
+  "teoria": 2.001
+ },
+ "amostra": 6,
+ "media_views_dia": 6.0,
+ "atualizado": "2026-11-18T08:29+00:00",
  "fonte_views": "pagina"
 }
