@@ -276,7 +276,7 @@ def _gerar_um(client, kind: str, fatos: str, proibidos: list, angulo: str, motiv
     base = date_cls.fromisoformat(_DATA_ALVO[0]) if _DATA_ALVO[0] else date_cls.today()
     dias = (date_cls(2026, 11, 19) - base).days
     prazo = (f"Faltam {dias} dia(s) para o lancamento (19/11/2026); se citar prazo, use esse numero exato.\n"
-             if dias >= 0 else "GTA VI JA FOI LANCADO (19/11/2026): fale no presente/passado e NUNCA use 'faltam X dias' nem 'antes do lancamento'. Use so fatos de <fatos_confirmados> e manchetes do radar.\n")
+             if dias > 0 else "GTA VI JA FOI LANCADO (hoje, 19/11/2026, ou antes): fale no presente/passado (no dia do lancamento: 'sai hoje'/'saiu hoje') e NUNCA use 'faltam X dias' nem 'antes do lancamento'. Use so fatos de <fatos_confirmados> e manchetes do radar.\n")
     pega = f" PEGADA obrigatoria (se divergir do angulo no formato, a PEGADA vence): {estilos.pegada_texto(pegada)}" if (pegada and tipo != "vazamento") else ""
     aviso = f"\nA tentativa anterior foi recusada: {motivo}. Corrija isso.\n" if motivo else ""
     prompt = (
