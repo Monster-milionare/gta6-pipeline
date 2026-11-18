@@ -118,5 +118,15 @@
   "estilo": "cinema",
   "pegada": "contagem",
   "publicado_em": "2026-11-18T12:20:00-03:00"
+ },
+ {
+  "video_id": "8KMFk73EjY8",
+  "item_id": "long-2026-11-18",
+  "kind": "long",
+  "tipo": "long",
+  "titulo": "Debate A ou B: Vice City ou áreas externas de Leonida?",
+  "estilo": "jornal",
+  "pegada": "ab",
+  "publicado_em": "2026-11-18T19:00:00-03:00"
  }
 ]
