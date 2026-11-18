@@ -45,7 +45,7 @@ from tts import synthesize_sentences
 FUSO = ZoneInfo("America/Sao_Paulo")
 PASTA = config.REVIEW_DIR / "reels"
 POSTADOS = PASTA / "postados.txt"
-EXTRAS_POR_DIA = 2
+EXTRAS_POR_DIA = 3
 MAX_FALHAS_SEGUIDAS = 2
 
 HASHTAGS = ("#gta6 #gtavi #gta6brasil #rockstargames #gtavicity #games #gamer "

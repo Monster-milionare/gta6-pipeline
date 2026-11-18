@@ -96,7 +96,7 @@ def _load_knowledge_base() -> str:
 # quando a cota do YouTube (ver publish.py) nao cobre todos os envios do dia.
 N_SHORTS_NORMAIS = 6
 N_TEORIAS = 2
-ORDEM_DO_DIA = ["short", "long"]   # Atualizacao 3.0: so 2 por dia, cada um caprichado
+ORDEM_DO_DIA = ["short", "long", "short", "short", "short", "short"]   # Semana de lancamento: ate 5 por dia (cota do YouTube = 6)
 
 def limite_uploads() -> int:
     """Quantos envios por dia a cota gratis do YouTube aguenta (cada upload
@@ -127,6 +127,25 @@ ANGULOS = [
     "a pergunta que todo mundo faz e a resposta oficial em 30 segundos",
     "A ou B: duas opcoes e pedido de voto nos comentarios (plataforma, personagem, cidade)",
     "o que a Rockstar ainda NAO disse oficialmente e por que isso importa",
+]
+
+
+# Depois de 19/11/2026 o jogo ja saiu: nada de "antes do lancamento" nem contagem regressiva.
+# Os fatos novos vem do radar (manchetes de veiculos confiaveis) e dos fatos oficiais.
+ANGULOS_POS = [
+    "o que a imprensa confiavel esta dizendo do jogo agora (use so as manchetes do radar, cite o veiculo)",
+    "detalhe confirmado de Leonida ou de um personagem que os fas estao comentando depois do lancamento (so o que esta nos fatos ou no radar)",
+    "pergunta que os jogadores fazem no primeiro dia (plataforma, atualizacao, servidor, preco) com a resposta oficial",
+    "verdade ou mito sobre o jogo agora que ele saiu: desmonte uma duvida usando so fatos confirmados",
+    "A ou B: duas escolhas de jogador (personagem, cidade, estilo de jogo) e pedido de voto nos comentarios",
+    "comparacao entre o que os trailers mostraram e o que foi confirmado oficialmente, so com fatos",
+    "o que a Rockstar ja confirmou sobre atualizacoes e conteudo futuro, e o que ainda nao disse",
+    "dica de comeco de jogo que a Rockstar ou a imprensa confiavel confirmou (so o que esta nas fontes)",
+]
+ANGULOS_LONGO_POS = [
+    "balanco do lancamento: o que ja esta confirmado oficialmente e o que a imprensa confiavel reportou, em blocos",
+    "perguntas e respostas do primeiro dia de jogo: as duvidas mais comuns e as respostas oficiais",
+    "guia de Leonida: regioes confirmadas, o que cada uma e e o que a Rockstar disse sobre elas",
 ]
 
 
@@ -257,7 +276,7 @@ def _gerar_um(client, kind: str, fatos: str, proibidos: list, angulo: str, motiv
     base = date_cls.fromisoformat(_DATA_ALVO[0]) if _DATA_ALVO[0] else date_cls.today()
     dias = (date_cls(2026, 11, 19) - base).days
     prazo = (f"Faltam {dias} dia(s) para o lancamento (19/11/2026); se citar prazo, use esse numero exato.\n"
-             if dias >= 0 else "")
+             if dias >= 0 else "GTA VI JA FOI LANCADO (19/11/2026): fale no presente/passado e NUNCA use 'faltam X dias' nem 'antes do lancamento'. Use so fatos de <fatos_confirmados> e manchetes do radar.\n")
     pega = f" PEGADA obrigatoria (se divergir do angulo no formato, a PEGADA vence): {estilos.pegada_texto(pegada)}" if (pegada and tipo != "vazamento") else ""
     aviso = f"\nA tentativa anterior foi recusada: {motivo}. Corrija isso.\n" if motivo else ""
     prompt = (
@@ -326,8 +345,14 @@ def generate_daily_content(date_str: str | None = None) -> DailyBatch:
             if len(NOTICIAS_VAZAMENTO) > len(usados_rel):
                 relato = NOTICIAS_VAZAMENTO[len(usados_rel)]
         veiculos = tuple(relato["veiculos"]) if relato else ()
-        angulo = (ANGULOS_LONGO[deslocamento % len(ANGULOS_LONGO)] if kind == "long"
-                  else ANGULOS[(deslocamento + n * 5) % len(ANGULOS)])
+        pos = date_cls.fromisoformat(date_str) >= date_cls(2026, 11, 19)
+        lista_l = ANGULOS_LONGO_POS if pos else ANGULOS_LONGO
+        lista_c = (list(ANGULOS_POS) + [a for a in ANGULOS if a not in ANGULOS_POS][:0]) if pos else ANGULOS
+        if pos:   # o radar injeta manchetes novas no inicio de ANGULOS; mantem so os que nao falam de pre-lancamento
+            novos = [a for a in ANGULOS if "ANTES do lancamento" not in a and "faltam X" not in a and "antes do lancamento" not in a and a not in ANGULOS_POS]
+            lista_c = list(ANGULOS_POS) + novos[:6]
+        angulo = (lista_l[deslocamento % len(lista_l)] if kind == "long"
+                  else lista_c[(deslocamento + n * 5) % len(lista_c)])
         if tipo == "vazamento":
             angulo = "siga so o pedido de VAZAMENTO acima"
         motivo, recusados, ok = None, [], False
@@ -366,9 +391,9 @@ def generate_daily_content(date_str: str | None = None) -> DailyBatch:
 # Regras extras injetadas no prompt do sistema: o canal tem poucas views, entao
 # cada um dos 2 videos do dia precisa ser memoravel e 100% verificavel.
 SYSTEM_PROMPT += """
-19. QUALIDADE ACIMA DE VOLUME (so saem 2 videos por dia). Cada roteiro precisa de:
+19. QUALIDADE ACIMA DE VOLUME (poucos videos por dia, cada um caprichado). Cada roteiro precisa de:
     (a) um GANCHO que gere curiosidade ou urgencia real nos primeiros 2 segundos,
-    ligado ao lancamento de GTA VI em 19/11/2026 (a maior janela de busca do ano);
+    ligado ao momento atual de GTA VI (lancado em 19/11/2026, a maior janela de busca do ano);
     (b) um fato confirmado NOVO a cada duas frases (nada de repetir ideia com outras
     palavras, nada de enrolacao);
     (c) PROIBIDO prometer "detalhe que ninguem viu", "segredo", "revelado" ou "o que
