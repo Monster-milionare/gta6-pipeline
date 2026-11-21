@@ -228,5 +228,15 @@
   "estilo": "cinema",
   "pegada": "contagem",
   "publicado_em": "2026-11-21T19:00:00-03:00"
+ },
+ {
+  "video_id": "WchBQAQCnHo",
+  "item_id": "short-2026-11-21-02",
+  "kind": "short",
+  "tipo": "short",
+  "titulo": "Vazamento GTA VI: mito dos 60fps no PS5 Pro",
+  "estilo": "neon",
+  "pegada": "mito",
+  "publicado_em": "2026-11-21T19:25:00-03:00"
  }
 ]
