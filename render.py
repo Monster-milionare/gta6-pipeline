@@ -516,12 +516,15 @@ class Fundo:
 
     def _quadro_foto(self) -> Image.Image:
         img, (dx, dy), aproxima = self.foto
-        p = self.n_plano / max(1, self.frames_plano - 1)
+        p = min(1.0, max(0.0, self.n_plano / max(1, self.frames_plano - 1)))
         zoom = 1.0 + 0.16 * (p if aproxima else 1 - p)
         cw, ch = self.w * 1.04 / zoom * 1.0, self.h * 1.04 / zoom * 1.0
         sobra_x, sobra_y = img.width - cw, img.height - ch
         cx = sobra_x / 2 + dx * sobra_x * 0.45 * (p - 0.5) * 2
         cy = sobra_y / 2 + dy * sobra_y * 0.45 * (p - 0.5) * 2
+        cx = min(max(0.0, cx), max(0.0, img.width - cw))
+        cy = min(max(0.0, cy), max(0.0, img.height - ch))
+        cw, ch = min(cw, img.width - cx), min(ch, img.height - cy)
         return img.resize((self.w, self.h), Image.BILINEAR, box=(cx, cy, cx + cw, cy + ch))
 
     def frame(self, t: float) -> tuple[Image.Image, int, bool]:
