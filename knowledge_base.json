@@ -1,24 +1,20 @@
 {
   "_leia_isto": "Mantenha aqui so fatos CONFIRMADOS oficialmente (rockstargames.com/VI, newswire da Rockstar/Take-Two, apresentacao na Netflix). NUNCA cole rumor, leak ou teoria nao confirmada aqui - este arquivo e a unica fonte de 'fatos do jogo' que o gerador de roteiro pode usar, exatamente para evitar que a IA invente algo que pareca um vazamento real.",
-
   "fonte_oficial": "https://www.rockstargames.com/VI",
-  "atualizado_em": "2026-11-09",
-
-  "data_lancamento": "19 de novembro de 2026 (faltam ~13 dias a partir de hoje)",
-  "pre_load": "Pre-carga do jogo liberada a partir de 10 de novembro de 2026 (segundo rockstargames.com/VI)",
-
-  "plataformas": ["PlayStation 5", "Xbox Series X|S"],
+  "atualizado_em": "2026-11-23",
+  "data_lancamento": "19 de novembro de 2026 (ja lancado)",
+  "pre_load": "A pre-carga foi liberada a partir de 10 de novembro de 2026 (segundo rockstargames.com/VI); o jogo ja esta disponivel.",
+  "plataformas": [
+    "PlayStation 5",
+    "Xbox Series X|S"
+  ],
   "observacao_plataformas": "Sem PC nem Switch 2 anunciados ate agora. Qualquer afirmacao sobre versao de PC e especulacao, nao fato.",
-
   "protagonistas": [
     "Jason Duval",
     "Lucia Caminos"
   ],
-
   "sinopse_oficial": "Um roubo que parecia facil (\"easy score\") da errado e deixa Jason e Lucia presos numa conspiracao criminosa que se espalha por todo o estado de Leonida.",
-
   "cenario": "Leonida, estado ficticio inspirado na Florida, com Vice City modernizada e mais densa como cidade central",
-
   "localidades_confirmadas_em_material_oficial": [
     "Vice City",
     "Keys of Leonida",
@@ -27,7 +23,6 @@
     "Ambrosia",
     "Mount Kalaga"
   ],
-
   "trailers_oficiais": [
     {
       "nome": "Trailer 1",
@@ -67,9 +62,7 @@
       ]
     }
   ],
-
   "observacao_leak_agosto_2026": "Houve um vazamento de gameplay nao-oficial pouco antes do Extended Look; a Rockstar chamou o episodio de 'heartbreaking'. NAO use conteudo desse leak como fonte - trate apenas o material oficial acima como confirmado.",
-
   "eventos_proximos": [
     {
       "nome": "Grand Theft Auto VI: The Festival",
@@ -78,14 +71,26 @@
       "parceiro": "PlayStation",
       "fonte": "Newswire da Rockstar Games (confirmado via cobertura da imprensa - Push Square; a pagina oficial rockstargames.com/VI/gtavi-thefestival e renderizada em JS e pode nao abrir em todo scraper, mas o evento e real e foi anunciado oficialmente). Confira a pagina oficial antes de publicar qualquer detalhe novo.",
       "lineup_14_atos": [
-        "Travis Scott (Cactus Jack)", "Don Toliver", "Kodak Black", "Sofaygo",
-        "Cardi B", "Ca7riel & Paco Amoroso", "Justice (DJ set)", "Metro Boomin",
-        "Nick Leon B2B DJ Python", "Prospa B2B Skream", "Rauw & Friends",
-        "Suero", "Tainy", "The Dare B2B Fcukers (DJ set)"
+        "Travis Scott (Cactus Jack)",
+        "Don Toliver",
+        "Kodak Black",
+        "Sofaygo",
+        "Cardi B",
+        "Ca7riel & Paco Amoroso",
+        "Justice (DJ set)",
+        "Metro Boomin",
+        "Nick Leon B2B DJ Python",
+        "Prospa B2B Skream",
+        "Rauw & Friends",
+        "Suero",
+        "Tainy",
+        "The Dare B2B Fcukers (DJ set)"
       ],
-      "ingressos": "Sorteio/lottery de ingressos fechou as 16h (horario do leste dos EUA) de 10/11/2026. Sem preco ou informacao de streaming/transmissao confirmada ate a data desta nota - nao afirme preco nem transmissao sem confirmar antes."
+      "ingressos": "Sorteio/lottery de ingressos fechou as 16h (horario do leste dos EUA) de 10/11/2026. Sem preco ou informacao de streaming/transmissao confirmada ate a data desta nota - nao afirme preco nem transmissao sem confirmar antes.",
+      "status": "O evento estava marcado para 21/11/2026 (depois do lancamento) e ja passou; so cite o que a Rockstar publicou oficialmente."
     }
   ],
-
-  "observacao_geral": "Sempre confira rockstargames.com/VI antes de cada lote: a Rockstar esta publicando novidades quase diarias nessa reta final (ex.: itens datados de 29/10, 03/11 e 05/11/2026 na propria pagina). Atualize este arquivo com qualquer fato novo confirmado ali antes de pedir pro gerador criar roteiro. Veja tambem 'eventos_proximos' acima - mantenha essa lista atualizada com anuncios de eventos/novidades conforme forem confirmados, e a fonte de 'conteudo novo' (noticias, easter eggs a explorar) previsto no roteiro."
+  "observacao_geral": "Sempre confira rockstargames.com/VI antes de cada lote: a Rockstar esta publicando novidades quase diarias nessa reta final (ex.: itens datados de 29/10, 03/11 e 05/11/2026 na propria pagina). Atualize este arquivo com qualquer fato novo confirmado ali antes de pedir pro gerador criar roteiro. Veja tambem 'eventos_proximos' acima - mantenha essa lista atualizada com anuncios de eventos/novidades conforme forem confirmados, e a fonte de 'conteudo novo' (noticias, easter eggs a explorar) previsto no roteiro.",
+  "status_jogo": "GTA VI JA FOI LANCADO em 19 de novembro de 2026 (PS5 e Xbox Series X|S). Fale no presente/passado. NUNCA use contagem regressiva, 'faltam X dias' nem 'antes do lancamento'.",
+  "observacao_pos_lancamento": "Numeros de vendas, notas e relatos de jogadores NAO sao fatos confirmados pela Rockstar: use so manchetes do radar citando o veiculo, ou fatos oficiais deste arquivo. Nunca invente detalhe de gameplay."
 }
