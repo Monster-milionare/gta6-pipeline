@@ -1,0 +1,32 @@
+name: Atualizar base de fatos (pos-lancamento)
+on:
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  kb:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Atualizar knowledge_base.json
+        run: |
+          python3 - <<'PY'
+          import json
+          p = "knowledge_base.json"
+          d = json.load(open(p, encoding="utf-8"))
+          d["atualizado_em"] = "2026-11-23"
+          d["status_jogo"] = "GTA VI JA FOI LANCADO em 19 de novembro de 2026 (PS5 e Xbox Series X|S). Fale no presente/passado. NUNCA use contagem regressiva, 'faltam X dias' nem 'antes do lancamento'."
+          d["data_lancamento"] = "19 de novembro de 2026 (ja lancado)"
+          d["pre_load"] = "A pre-carga foi liberada a partir de 10 de novembro de 2026 (segundo rockstargames.com/VI); o jogo ja esta disponivel."
+          for e in d.get("eventos_proximos", []):
+              if "Festival" in e.get("nome", ""):
+                  e["status"] = "O evento estava marcado para 21/11/2026 (depois do lancamento) e ja passou; so cite o que a Rockstar publicou oficialmente."
+          d["observacao_pos_lancamento"] = "Numeros de vendas, notas e relatos de jogadores NAO sao fatos confirmados pela Rockstar: use so manchetes do radar citando o veiculo, ou fatos oficiais deste arquivo. Nunca invente detalhe de gameplay."
+          json.dump(d, open(p, "w", encoding="utf-8"), ensure_ascii=False, indent=2)
+          print("ok")
+          PY
+          git config user.name "setup-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add knowledge_base.json
+          git commit -m "knowledge_base: jogo ja lancado (19/11), remove contagem regressiva"
+          git push
