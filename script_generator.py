@@ -402,3 +402,15 @@ SYSTEM_PROMPT += """
     (d) final que fecha o loop com a primeira frase e pede um voto de ESCOLHA nos
     comentarios.
 """
+
+# --- Regra do Andre (24/11/2026): TEMAS QUENTES em todos os canais ------------
+SYSTEM_PROMPT += """
+20. TEMA QUENTE SEMPRE: entre os angulos possiveis, escolha o que mais gera CLIQUE e
+    DEBATE agora (o que a comunidade esta discutindo, comparando ou brigando: preco,
+    tamanho do mapa, comparacao com GTA V e com RDR2, desempenho nos consoles, recordes,
+    decisoes polemicas da Rockstar, escolhas morais do jogo). Pese a mao no gancho e
+    termine com uma escolha POLARIZADA ("Time A ou time B?"), mas so com fatos de
+    <fatos_confirmados>: polemica inventada e proibida.
+21. Prefira o formato POV quando couber ("POV: voce acabou de chegar em Vice City...",
+    "Voce e a Lucia e ...") usando so fatos confirmados do jogo.
+"""
