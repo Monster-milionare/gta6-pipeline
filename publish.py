@@ -63,7 +63,7 @@ _thumb_bloqueada = False   # canal sem verificacao por telefone: 403 em toda thu
 # Horários-alvo de publicação (Brasília). Longo perto do almoço, shorts
 # espalhados do almoço até a noite (picos de uso de celular no Brasil).
 SLOT_LONGO = "19:00"   # pico de noite no Brasil
-SLOTS_SHORTS = ["12:20", "10:20", "08:50", "14:10", "16:00", "17:40", "19:20", "20:50"]
+SLOTS_SHORTS = ["07:10", "12:20", "18:10", "20:50", "10:20", "14:10", "16:00", "17:40"]   # 1o Short no trajeto da manha (pedido do Andre)
 # Distância mínima entre dois vídeos indo ao ar (quando os horários-alvo
 # já passaram e a execução está "correndo atrás").
 GAP_MIN = 25
@@ -159,6 +159,20 @@ def _upload_com_retry(**kwargs) -> str:
     raise ultimo
 
 
+def _alternar_narrador() -> None:
+    """Um video com narrador, o seguinte com narradora (pedido do Andre). So vozes com sotaque brasileiro."""
+    import json as _json
+    import tts as _tts
+    try:
+        n = len(_json.loads((config.BASE_DIR / "state" / "videos.json").read_text(encoding="utf-8")))
+    except Exception:
+        n = 0
+    fem = ["pt-BR-ThalitaMultilingualNeural", "pt-BR-FranciscaNeural"]
+    masc = ["pt-BR-MacerioMultilingualNeural", "pt-BR-AntonioNeural"]
+    _tts.VOICE_PREFERENCIAS[:] = (fem + masc) if n % 2 else (masc + fem)
+    print(f"[publish] narracao: {'feminina' if n % 2 else 'masculina'} ({_tts.VOICE_PREFERENCIAS[0]})", flush=True)
+
+
 def _slot_do_item(batch, item, date_str: str) -> datetime:
     if item.kind == "long":
         hhmm = SLOT_LONGO
@@ -222,6 +236,7 @@ def _process_item(batch, item, date_str: str, review_path: Path, ultimo: datetim
     print(f"[publish] processando {item.item_id} ({item.kind}): {item.titulo}", flush=True)
 
     audio_dir = config.ASSETS_DIR / "tmp" / "audio" / item.item_id
+    _alternar_narrador()
     segments = synthesize_sentences(item.roteiro, audio_dir)
     cta_segments = synthesize_sentences(_cta_frase(item), audio_dir / "cta", cta=True)
     segments = segments + cta_segments
