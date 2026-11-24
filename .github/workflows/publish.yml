@@ -9,6 +9,7 @@ on:
     # se ainda nao existir + sobe tudo com horario agendado no proprio
     # YouTube - ver publish.py). Os outros disparos do dia so conferem que
     # nao ha nada pendente e terminam em segundos.
+    - cron: "23 8 * * *"    # 05h23 Brasilia: logo depois que a cota do YouTube zera - agenda o dia (1o Short 07h10)
     - cron: "23 9 * * *"
     - cron: "47 10 * * *"
     - cron: "11 11 * * *"
