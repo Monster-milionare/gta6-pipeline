@@ -418,5 +418,15 @@
   "estilo": "cinema",
   "pegada": "ab",
   "publicado_em": "2026-11-25T19:50:00-03:00"
+ },
+ {
+  "video_id": "f-vGRM81Cfg",
+  "item_id": "short-2026-11-25-04",
+  "kind": "short",
+  "tipo": "short",
+  "titulo": "Leaker lança .exe: GTA VI no PC, mito?",
+  "estilo": "neon",
+  "pegada": "mito",
+  "publicado_em": "2026-11-25T20:15:00-03:00"
  }
 ]
