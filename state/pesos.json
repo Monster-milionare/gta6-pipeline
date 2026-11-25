@@ -1,31 +1,32 @@
 {
  "estilos": {
-  "jornal": 0.507,
-  "cinema": 1.428,
-  "leak": 0.468,
-  "padrao": 0.674,
-  "neon": 0.872,
-  "limpo": 0.858,
-  "turbo": 1.634
+  "jornal": 0.755,
+  "cinema": 1.079,
+  "leak": 0.464,
+  "padrao": 0.673,
+  "neon": 0.745,
+  "limpo": 0.718,
+  "turbo": 1.942
  },
  "pegadas": {
-  "pergunta": 0.968,
-  "alerta": 1.498,
-  "vazamento": 0.468,
-  "detalhe": 1.245,
-  "mito": 1.02,
-  "numero": 0.944,
-  "contagem": 1.145,
-  "ab": 0.525
+  "pergunta": 0.746,
+  "alerta": 1.073,
+  "vazamento": 0.464,
+  "detalhe": 1.78,
+  "mito": 0.904,
+  "numero": 1.028,
+  "contagem": 0.905,
+  "ab": 0.527,
+  "lista3": 1.36
  },
  "tipos": {
-  "long": 0.513,
-  "short": 1.407,
-  "vazamento": 0.468,
-  "teoria": 0.724
+  "long": 0.494,
+  "short": 1.356,
+  "vazamento": 0.464,
+  "teoria": 0.71
  },
- "amostra": 30,
- "media_views_dia": 11.7,
- "atualizado": "2026-11-24T10:52+00:00",
+ "amostra": 36,
+ "media_views_dia": 12.5,
+ "atualizado": "2026-11-25T09:47+00:00",
  "fonte_views": "pagina"
 }
