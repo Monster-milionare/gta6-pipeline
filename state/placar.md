@@ -1,59 +1,59 @@
-# Placar da Atualizacao 2.0 - 25/11/2026 09:47 UTC
+# Placar da Atualizacao 2.0 - 26/11/2026 09:28 UTC
 
-Fonte das views: pagina. Videos medidos (20h+ no ar): 36. Media geral: 12.5 views/dia (janela de 4 dias).
+Fonte das views: pagina. Videos medidos (20h+ no ar): 39. Media geral: 11.9 views/dia (janela de 4 dias).
 
 
 ## Estilos de edicao
 
 | nome | videos | views/dia | peso |
 |---|---|---|---|
-| turbo | 7 | 27.7 | 1.942 |
-| cinema | 9 | 13.7 | 1.079 |
-| neon | 9 | 8.6 | 0.745 |
-| jornal | 4 | 7.9 | 0.755 |
-| limpo | 3 | 6.6 | 0.718 |
-| leak | 3 | 1.3 | 0.464 |
-| padrao | 1 | 0.2 | 0.673 |
+| turbo | 7 | 23.3 | 1.753 |
+| cinema | 11 | 16.4 | 1.328 |
+| neon | 9 | 7.4 | 0.694 |
+| limpo | 3 | 6.2 | 0.716 |
+| jornal | 5 | 5.6 | 0.624 |
+| leak | 3 | 1.4 | 0.472 |
+| padrao | 1 | 0.2 | 0.674 |
 
 ## Pegadas de roteiro
 
 | nome | videos | views/dia | peso |
 |---|---|---|---|
-| lista3 | 1 | 26.0 | 1.36 |
-| detalhe | 6 | 25.5 | 1.78 |
-| alerta | 5 | 13.8 | 1.073 |
-| numero | 5 | 13.0 | 1.028 |
-| contagem | 7 | 11.0 | 0.905 |
-| mito | 2 | 10.1 | 0.904 |
-| pergunta | 3 | 7.2 | 0.746 |
-| ab | 4 | 3.6 | 0.527 |
-| vazamento | 3 | 1.3 | 0.464 |
+| detalhe | 7 | 25.5 | 1.898 |
+| lista3 | 1 | 21.8 | 1.28 |
+| contagem | 8 | 11.4 | 0.968 |
+| numero | 5 | 11.0 | 0.95 |
+| alerta | 6 | 10.9 | 0.939 |
+| mito | 2 | 9.4 | 0.895 |
+| pergunta | 3 | 5.4 | 0.672 |
+| ab | 4 | 2.8 | 0.49 |
+| vazamento | 3 | 1.4 | 0.472 |
 
 ## Tipos
 
 | nome | videos | views/dia | peso |
 |---|---|---|---|
-| short | 23 | 17.3 | 1.356 |
-| teoria | 2 | 5.2 | 0.71 |
-| long | 8 | 4.6 | 0.494 |
-| vazamento | 3 | 1.3 | 0.464 |
+| short | 25 | 16.3 | 1.346 |
+| teoria | 2 | 5.2 | 0.721 |
+| long | 9 | 4.5 | 0.491 |
+| vazamento | 3 | 1.4 | 0.472 |
 
 ## Ultimos videos
 
 | video | estilo | pegada | views |
 |---|---|---|---|
-| Leaker lança .exe: GTA VI no PC, mito? | neon | mito | ? |
-| Vice City vs Mount Kalaga: escolha seu domínio | cinema | ab | ? |
-| Darts removidos de GTA VI? O que isso revela | jornal | detalhe | ? |
-| Dois dias depois: respostas oficiais às dúvidas do prim | cinema | contagem | ? |
-| 3,79 bi em 1 dia: GTA VI bate recorde mundial | cinema | contagem | 25 |
-| Por que o Launch Trailer usa controle padrão do PS5? | cinema | detalhe | 50 |
-| Atenção: O que a Rockstar confirmou no lançamento? | jornal | alerta | 1 |
-| Qual plataforma jogar GTA VI hoje? | turbo | lista3 | 26 |
-| O detalhe oculto no Launch Trailer de GTA VI que poucos | turbo | detalhe | 114 |
-| R$ 22,5 bi: GTA VI quebra recorde no primeiro dia | jornal | numero | 37 |
-| GTA 6 fatura R$ 22,3 bi: o que ainda falta? | turbo | contagem | 19 |
-| Alerta: Descubra cada canto de Leonida antes de jogar | cinema | alerta | 6 |
-| $3.79 bilhões: o recorde que chocou GTA VI | neon | numero | 26 |
-| Faltam 2 dias: o que a Rockstar já confirmou? | cinema | contagem | 92 |
-| PS5 ou Xbox Series S: quem entrega 60 fps? | turbo | ab | 29 |
+| PS5 realmente tem mais quedas de FPS no GTA VI? | turbo | mito | ? |
+| Trailers x Realidade: 3 revelações que mudam GTA VI | jornal | lista3 | ? |
+| Qual console tem menos quedas de FPS em GTA VI? | turbo | pergunta | ? |
+| Leonida revelada: 6 regiões e o detalhe que ninguém viu | limpo | detalhe | ? |
+| Qual região de Leonida define seu império? | neon | lista3 | ? |
+| Leaker lança .exe: GTA VI no PC, mito? | neon | mito | 6 |
+| Vice City vs Mount Kalaga: escolha seu domínio | cinema | ab | 0 |
+| Darts removidos de GTA VI? O que isso revela | jornal | detalhe | 0 |
+| Dois dias depois: respostas oficiais às dúvidas do prim | cinema | contagem | 3 |
+| 3,79 bi em 1 dia: GTA VI bate recorde mundial | cinema | contagem | 32 |
+| Por que o Launch Trailer usa controle padrão do PS5? | cinema | detalhe | 66 |
+| Atenção: O que a Rockstar confirmou no lançamento? | jornal | alerta | 2 |
+| Qual plataforma jogar GTA VI hoje? | turbo | lista3 | 43 |
+| O detalhe oculto no Launch Trailer de GTA VI que poucos | turbo | detalhe | 139 |
+| R$ 22,5 bi: GTA VI quebra recorde no primeiro dia | jornal | numero | 50 |
